@@ -1,0 +1,23 @@
+<resources>
+    <string name="app_name">YZ 3D Video</string>
+    <string name="settings">Ayarlar</string>
+    <string name="prompt_hint">Ne görmek istiyorsun? (ör. Ay yüzeyinde bir astronot zıplıyor, arkada dünya dönüyor)</string>
+    <string name="generate">YZ ile üret</string>
+    <string name="demo">Örnek sahne</string>
+    <string name="export">Videoyu kaydet ve paylaş</string>
+    <string name="status_idle">Bir metin yaz ve “YZ ile üret”e bas.</string>
+    <string name="status_generating">Gemini sahneyi tasarlıyor…</string>
+    <string name="status_ready">Sahne hazır: %1$s</string>
+    <string name="status_exporting">Video oluşturuluyor… %1$d%%</string>
+    <string name="status_saved">Video galeriye kaydedildi (Filmler/YZ3DVideo).</string>
+    <string name="error_prefix">Hata: %1$s</string>
+    <string name="need_key">Önce Ayarlar’dan Gemini API anahtarını gir.</string>
+    <string name="empty_prompt">Önce bir metin yaz</string>
+    <string name="share_title">Videoyu paylaş</string>
+
+    <string name="settings_info">Gemini API anahtarını Google AI Studio’dan alabilirsin: https://aistudio.google.com/apikey\n\nAnahtar yalnızca bu cihazda, şifreli olarak saklanır ve sadece Google’ın Gemini sunucusuna gönderilir.</string>
+    <string name="api_key_hint">Gemini API anahtarı</string>
+    <string name="model_hint">Model adı</string>
+    <string name="save">Kaydet</string>
+    <string name="saved">Kaydedildi</string>
+</resources>
