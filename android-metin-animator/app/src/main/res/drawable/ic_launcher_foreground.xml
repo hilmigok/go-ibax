@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Güneş -->
+    <path
+        android:fillColor="#FFD54F"
+        android:pathData="M68,40m-13,0a13,13 0,1 1,26 0a13,13 0,1 1,-26 0" />
+    <!-- Yer çizgisi / tepe -->
+    <path
+        android:fillColor="#66BB6A"
+        android:pathData="M28,78 L50,58 L66,72 L80,60 L80,82 L28,82 z" />
+</vector>
