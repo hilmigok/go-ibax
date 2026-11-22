@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Film karesi içinde dağ ve güneş -->
+    <path android:fillColor="#E0B062" android:pathData="M30,34h48v40h-48z" />
+    <path android:fillColor="#16161C" android:pathData="M33,37h42v34h-42z" />
+    <path android:fillColor="#E0B062" android:pathData="M66,46m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0" />
+    <path android:fillColor="#B07C2E" android:pathData="M33,71 L46,52 L55,63 L61,56 L75,71 Z" />
+</vector>

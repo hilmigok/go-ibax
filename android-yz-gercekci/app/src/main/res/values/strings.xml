@@ -1,0 +1,44 @@
+<resources>
+    <string name="app_name">YZ Gerçekçi Sahne</string>
+    <string name="settings">Ayarlar</string>
+    <string name="prompt_label">Sahneyi anlat (ne kadar ayrıntılı, o kadar iyi)</string>
+    <string name="style_label">Görsel üslup</string>
+    <string name="shot_count">Kare sayısı: %1$d</string>
+    <string name="captions">Altyazı ekle</string>
+    <string name="generate">Senaryo + gerçekçi görseller üret</string>
+    <string name="export">Videoyu kaydet ve paylaş</string>
+    <string name="save_photos">Fotoğrafları kaydet</string>
+    <string name="cancel">İptal</string>
+    <string name="preview_empty">Önizleme burada oynayacak</string>
+    <string name="thumbs_hint">Bir kareye dokunarak tarifini düzenleyip yeniden üretebilir ya da fotoğraf olarak kaydedebilirsin.</string>
+    <string name="status_idle">Sahneyi anlat, üslup ve kare sayısını seç, sonra “Üret”e bas.</string>
+    <string name="status_planning">Gemini senaryoyu ve çekimleri planlıyor…</string>
+    <string name="status_image">Gerçekçi görüntü üretiliyor: %1$d / %2$d</string>
+    <string name="status_ready">Hazır: %1$s</string>
+    <string name="status_partial">%1$d kare üretilemedi. Dokunup tekrar deneyebilirsin. (%2$s)</string>
+    <string name="status_cancelled">İptal edildi.</string>
+    <string name="status_exporting">Video oluşturuluyor… %1$d%%</string>
+    <string name="status_saved">Video galeriye kaydedildi (Filmler/YZGercekci).</string>
+    <string name="photo_saved">Fotoğraf kaydedildi (Resimler/YZGercekci)</string>
+    <string name="photos_saved">%1$d fotoğraf galeriye kaydedildi (Resimler/YZGercekci).</string>
+    <string name="error_prefix">Hata: %1$s</string>
+    <string name="need_key">Önce Ayarlar’dan Gemini API anahtarını gir.</string>
+    <string name="empty_prompt">Önce sahneyi anlat</string>
+    <string name="share_title">Paylaş</string>
+    <string name="format_portrait">Dikey 9:16 · TikTok / Reels</string>
+    <string name="format_landscape">Yatay 16:9 · YouTube</string>
+    <string name="format_changed_hint">Biçim değişti. En iyi kadraj için görselleri bu biçimde yeniden üret.</string>
+    <string name="shot_title">Kare %1$d</string>
+    <string name="shot_dialog_info">Görüntü modeline giden tarif (İngilizce). Düzenleyip yeniden üretebilirsin.</string>
+    <string name="regenerate">Yeniden üret</string>
+    <string name="save_photo">Fotoğrafı kaydet</string>
+
+    <string name="settings_info">Gemini API anahtarını Google AI Studio’dan alabilirsin: https://aistudio.google.com/apikey\n\nAnahtar yalnızca bu cihazda, şifreli olarak saklanır ve sadece Google’ın Gemini sunucusuna gönderilir.</string>
+    <string name="api_key_hint">Gemini API anahtarı</string>
+    <string name="text_model_hint">Senaryo modeli (metin)</string>
+    <string name="image_model_hint">Görüntü modeli</string>
+    <string name="image_model_info">Örnekler: gemini-2.5-flash-image (varsayılan), gemini-3-pro-image-preview (daha kaliteli), imagen-4.0-generate-001, imagen-4.0-ultra-generate-001. Görüntü modelleri çoğunlukla AI Studio’da faturalandırma (ücretli plan) açık olmasını ister.</string>
+    <string name="consistency">Karakter tutarlılığı (önceki kareyi referans gönder — yalnız Gemini görüntü modellerinde)</string>
+    <string name="save">Kaydet</string>
+    <string name="saved">Kaydedildi</string>
+</resources>

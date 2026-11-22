@@ -1,0 +1,74 @@
+name: YZ Gerçekçi Sahne APK Derle
+
+# YZ destekli gerçekçi sahne uygulamasını test eder, derler ve
+# doğrudan indirilebilir bir APK olarak Releases'e koyar.
+
+on:
+  push:
+    paths:
+      - 'android-yz-gercekci/**'
+      - '.github/workflows/android-gercekci-build.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write   # APK'yı Releases'e yükleyebilmek için
+
+concurrency:
+  group: yzg-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android-yz-gercekci
+
+    steps:
+      - name: Depoyu al
+        uses: actions/checkout@v4
+
+      - name: JDK 17 kur
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK kur
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
+
+      - name: Gradle kur
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.2'
+
+      - name: Birim testleri
+        run: gradle testDebugUnitTest --no-daemon --stacktrace
+
+      - name: Debug APK derle
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: Test raporunu yükle (hata olursa)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yzg-test-raporu
+          path: android-yz-gercekci/app/build/reports/tests/
+
+      - name: APK'yı anlaşılır bir adla kopyala
+        run: cp app/build/outputs/apk/debug/app-debug.apk yz-gercekci.apk
+
+      - name: APK'yı Release olarak yayınla (doğrudan indirme linki)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-gercekci-latest
+          name: YZ Gerçekçi Sahne (son sürüm)
+          body: |
+            YZ destekli gerçekçi sahne uygulamasının en son debug APK'sı.
+            Tablette yz-gercekci.apk dosyasına dokunup kurabilirsin.
+            İlk açılışta Ayarlar'dan Gemini API anahtarını gir.
+          prerelease: false
+          make_latest: false
+          files: android-yz-gercekci/yz-gercekci.apk
