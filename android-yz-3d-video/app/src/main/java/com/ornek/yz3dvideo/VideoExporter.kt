@@ -29,12 +29,14 @@ import kotlin.math.roundToInt
  */
 class VideoExporter(private val context: Context) {
 
-    fun export(scene: Scene3D, onProgress: (Float) -> Unit): Uri {
+    fun export(scene: Scene3D, videoFormat: VideoFormat, onProgress: (Float) -> Unit): Uri {
         val tmp = File(context.cacheDir, "yz3d_${System.currentTimeMillis()}.mp4")
+        val width = videoFormat.width
+        val height = videoFormat.height
 
-        val format = MediaFormat.createVideoFormat(MIME, WIDTH, HEIGHT).apply {
+        val format = MediaFormat.createVideoFormat(MIME, width, height).apply {
             setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-            setInteger(MediaFormat.KEY_BIT_RATE, 6_000_000)
+            setInteger(MediaFormat.KEY_BIT_RATE, videoFormat.bitRate)
             setInteger(MediaFormat.KEY_FRAME_RATE, FPS)
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
         }
@@ -57,7 +59,7 @@ class VideoExporter(private val context: Context) {
             val total = (scene.duration * FPS).roundToInt().coerceAtLeast(1)
             for (i in 0 until total) {
                 drain(encoder, muxer, state, endOfStream = false)
-                renderer.render(scene, i.toFloat() / FPS, WIDTH, HEIGHT)
+                renderer.render(scene, i.toFloat() / FPS, width, height)
                 egl.setPresentationTime(i * 1_000_000_000L / FPS)
                 egl.swap()
                 onProgress((i + 1).toFloat() / total)
@@ -75,7 +77,8 @@ class VideoExporter(private val context: Context) {
         }
 
         try {
-            return saveToGallery(tmp, scene.title)
+            val suffix = if (videoFormat.isPortrait) "9x16" else "16x9"
+            return saveToGallery(tmp, "${scene.title}_$suffix")
         } finally {
             tmp.delete()
         }
@@ -120,7 +123,7 @@ class VideoExporter(private val context: Context) {
     }
 
     private fun saveToGallery(file: File, title: String): Uri {
-        val safe = title.replace(Regex("[^\\p{L}\\p{N} _-]"), "").trim().take(40).ifEmpty { "sahne" }
+        val safe = title.replace(Regex("[^\\p{L}\\p{N} _-]"), "").trim().take(48).ifEmpty { "sahne" }
         val values = ContentValues().apply {
             put(MediaStore.Video.Media.DISPLAY_NAME, "${safe}_${System.currentTimeMillis()}.mp4")
             put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
@@ -202,8 +205,6 @@ class VideoExporter(private val context: Context) {
 
     companion object {
         private const val MIME = MediaFormat.MIMETYPE_VIDEO_AVC
-        private const val WIDTH = 1280
-        private const val HEIGHT = 720
         private const val FPS = 30
         private const val EGL_RECORDABLE_ANDROID = 0x3142
     }

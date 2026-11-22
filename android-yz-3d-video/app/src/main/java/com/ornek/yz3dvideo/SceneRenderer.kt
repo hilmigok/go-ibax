@@ -103,7 +103,9 @@ class SceneRenderer {
         val dir = target - eye
         val horiz = abs(dir.x) + abs(dir.z)
         val up = if (horiz < 0.001f * (abs(dir.y) + 1f)) Vec3(0f, 0f, -1f) else Vec3.UP
-        Matrix.perspectiveM(proj, 0, 50f, w.toFloat() / h, 0.3f, 500f)
+        // Dikey kadrajda yatay görüş açısı daralır; dikey açıyı büyüterek kenarların kesilmesini önle.
+        val fovY = if (h > w) 75f else 50f
+        Matrix.perspectiveM(proj, 0, fovY, w.toFloat() / h, 0.3f, 500f)
         Matrix.setLookAtM(view, 0, eye.x, eye.y, eye.z, target.x, target.y, target.z, up.x, up.y, up.z)
         Matrix.multiplyMM(vp, 0, proj, 0, view, 0)
 
@@ -173,9 +175,11 @@ class SceneRenderer {
     private fun drawCaption(text: String, w: Int, h: Int) {
         val tex = caption.textureFor(text, w, h)
         if (tex == 0) return
-        val top = -1f + 2f * caption.heightFraction
+        // Dikey videoda TikTok/Reels/Shorts alt kısma kendi arayüzünü koyar; altyazıyı yukarı al.
+        val bottom = if (h > w) -1f + 2f * 0.20f else -1f
+        val top = bottom + 2f * caption.heightFraction
         captionQuad.clear()
-        captionQuad.put(floatArrayOf(-1f, -1f, 0f, 1f, 1f, -1f, 1f, 1f, -1f, top, 0f, 0f, 1f, top, 1f, 0f))
+        captionQuad.put(floatArrayOf(-1f, bottom, 0f, 1f, 1f, bottom, 1f, 1f, -1f, top, 0f, 0f, 1f, top, 1f, 0f))
         glEnable(GL_BLEND)
         glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA) // bitmap önceden çarpılmış alfa kullanır
         glUseProgram(texProg)
@@ -208,17 +212,19 @@ class SceneRenderer {
             val k = "$w|$h|$text"
             if (k == key && tex != 0) return tex
 
-            val bh = (h * 0.22f).toInt().coerceAtLeast(32)
+            // Boyutlar kısa kenara göre: yatay ve dikey videoda yazı aynı oranda görünür.
+            val base = minOf(w, h).toFloat()
+            val bh = (base * 0.3f).toInt().coerceAtLeast(32)
             heightFraction = bh.toFloat() / h
             val bmp = Bitmap.createBitmap(w, bh, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bmp)
             val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.WHITE
-                textSize = h * 0.05f
+                textSize = base * 0.05f
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             }
             val margin = w * 0.06f
-            val pad = h * 0.02f
+            val pad = base * 0.02f
             val textWidth = (w - 2 * margin - 2 * pad).toInt().coerceAtLeast(1)
             val layout = StaticLayout.Builder.obtain(text, 0, text.length, paint, textWidth)
                 .setAlignment(Layout.Alignment.ALIGN_CENTER)
@@ -226,7 +232,7 @@ class SceneRenderer {
                 .setEllipsize(TextUtils.TruncateAt.END)
                 .build()
             val boxH = layout.height + 2 * pad
-            val boxTop = (bh - boxH - h * 0.03f).coerceAtLeast(0f)
+            val boxTop = (bh - boxH - base * 0.03f).coerceAtLeast(0f)
             val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(150, 0, 0, 0) }
             canvas.drawRoundRect(RectF(margin, boxTop, w - margin, boxTop + boxH), pad, pad, bg)
             canvas.translate(margin + pad, boxTop + pad)

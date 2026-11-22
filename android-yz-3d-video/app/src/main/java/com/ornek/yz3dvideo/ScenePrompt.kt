@@ -44,6 +44,21 @@ Rules:
 - Make the camera cinematic (slow push-in, pan or arc) and keep the main subject in view.
   Never put the camera inside an object or exactly above its target.
 - Use pleasing, coherent colors and lighting that match the mood (night: dark sky, low ambient).
+- The user message ends with a [FORMAT] line. For VERTICAL 9:16 (TikTok/Reels/Shorts): compose for a tall,
+  narrow frame — keep the main subject centered horizontally within about x in [-3, 3] of the camera's view,
+  bring the camera closer, prefer vertical motion (rising, falling, stacking, climbing), and keep the lower
+  quarter of the frame free of important details. For HORIZONTAL 16:9 (YouTube): use wide compositions
+  and lateral motion.
 - Output only the JSON object, no markdown, no comments.
 """.trimIndent()
+
+    /** Kullanıcı metnine seçilen video biçimini ekler. */
+    fun userMessage(prompt: String, format: VideoFormat): String {
+        val line = if (format.isPortrait) {
+            "[FORMAT] VERTICAL 9:16 video for TikTok / Instagram Reels / YouTube Shorts."
+        } else {
+            "[FORMAT] HORIZONTAL 16:9 video for YouTube."
+        }
+        return prompt.trim() + "\n\n" + line
+    }
 }

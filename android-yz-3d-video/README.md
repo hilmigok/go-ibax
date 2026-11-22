@@ -23,12 +23,23 @@ Metin ──► Gemini (sahne JSON'u) ──► SceneParser (doğrulama + sını
    Kamera başlangıç → bitiş arasında yumuşakça hareket eder.
 4. Önizleme ve video **aynı** çizim kodunu kullanır; video, önizlemenin birebir aynısıdır.
 
+## Video biçimleri
+
+| Biçim | Boyut | Platform |
+|---|---|---|
+| Dikey 9:16 (varsayılan) | 1080×1920, 30 fps, H.264 | TikTok, Instagram Reels, YouTube Shorts |
+| Yatay 16:9 | 1920×1080, 30 fps, H.264 | YouTube |
+
+Seçilen biçim Gemini'ye de bildirilir; dikeyde model özneyi ortada tutar, kamerayı
+yaklaştırır ve dikey hareketleri tercih eder. Dikey videoda altyazı, platformların
+alt kısımdaki arayüzüne denk gelmesin diye yukarı alınır. Süre en fazla 20 sn'dir.
+
 ## Kurulum ve kullanım
 
 1. APK'yı kur: https://github.com/hilmigok/go-ibax/releases/download/apk-3d-latest/yz-3d-video.apk
 2. **Ayarlar**'a gir, Gemini API anahtarını yaz (https://aistudio.google.com/apikey).
    Model adı varsayılan olarak `gemini-2.5-flash`'tır; Google yeni model çıkarırsa buradan değiştirebilirsin.
-3. Metni yaz → **YZ ile üret** → önizlemeyi izle → **Videoyu kaydet ve paylaş**.
+3. Biçimi seç (Dikey 9:16 / Yatay 16:9) → metni yaz → **YZ ile üret** → önizlemeyi izle → **Videoyu kaydet ve paylaş**.
 4. Videolar `Filmler/YZ3DVideo` klasörüne kaydedilir.
 
 **Örnek sahne** düğmesi internet/anahtar olmadan da çalışır.
@@ -58,6 +69,7 @@ app/src/main/java/com/ornek/yz3dvideo/
 ├── SceneRenderer.kt     # OpenGL ES 2.0 çizici (ışık, gökyüzü, altyazı)
 ├── PreviewRenderer.kt   # GLSurfaceView önizlemesi
 ├── VideoExporter.kt     # EGL + MediaCodec + MediaMuxer ile MP4
+├── VideoFormat.kt       # 9:16 ve 16:9 çıktı boyutları
 └── DemoScene.kt         # Çevrimdışı örnek sahne
 ```
 
@@ -71,5 +83,5 @@ app/src/main/java/com/ornek/yz3dvideo/
 ## Sınırlar
 
 - Görüntü stilize 3D'dir (ilkel şekiller + düz ışık), gerçekçi film değildir.
-- Ses yoktur.
+- Ses yoktur (platformlarda müzik paylaşırken eklenebilir).
 - `minSdk = 29` (Android 10+).
