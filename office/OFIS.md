@@ -12,6 +12,7 @@ claude.ai/code veya Claude uygulamasından (tablet/bilgisayar) ulaşır.
 | Kodcu | `.claude/agents/kodcu.md` | Kod yazar, hata düzeltir, test ekler |
 | Araştırmacı | `.claude/agents/arastirmaci.md` | Kodu/dokümanı/webi inceler, rapor çıkarır, seçenek önerir |
 | İnceleyici | `.claude/agents/inceleyici.md` | Kodcunun işini inceler, test çalıştırır, onay/ret verir |
+| Viral | `.claude/agents/viral.md` | YouTube, TikTok ve Instagram'daki viral animasyonları tarar, her gün rapor hazırlar |
 
 ## İş akışı
 
