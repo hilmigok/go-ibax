@@ -24,7 +24,7 @@ claude.ai/code veya Claude uygulamasından (tablet/bilgisayar) ulaşır.
 ## Kurallar
 
 - Dil: Sahiple ve ajanlar arası iletişim **Türkçe**; kod, commit mesajları ve kod yorumları İngilizce olabilir.
-- Her ajan **kendi dalında** çalışır: `ofis/<rol>/<kısa-görev-adı>`. `master`'a doğrudan push yok.
+- Her ajan **kendi dalında** çalışır: `ofis/<rol>/<kısa-görev-adı>`. `main`'a doğrudan push yok.
 - Pull request yalnızca sahip isterse açılır.
 - Bulut makineleri geçicidir: kalıcı olması gereken her şey commit + push edilir.
 - Gizli bilgi (anahtar, parola) depoya veya mesajlara yazılmaz.
