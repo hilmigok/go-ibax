@@ -1,0 +1,46 @@
+name: Android APK Derle
+
+# Metin Animatör uygulamasını GitHub sunucularında derler ve
+# indirilebilir bir APK (artifact) olarak sunar.
+
+on:
+  push:
+    paths:
+      - 'android-metin-animator/**'
+      - '.github/workflows/android-build.yml'
+  workflow_dispatch: {}   # "Run workflow" düğmesiyle elle de çalıştırılabilir
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android-metin-animator
+
+    steps:
+      - name: Depoyu al
+        uses: actions/checkout@v4
+
+      - name: JDK 17 kur
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK kur
+        uses: android-actions/setup-android@v3
+
+      - name: Gradle kur
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.2'
+
+      - name: Debug APK derle
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: APK'yi artifact olarak yükle
+        uses: actions/upload-artifact@v4
+        with:
+          name: metin-animator-debug-apk
+          path: android-metin-animator/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
