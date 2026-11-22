@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Metin Animatör</string>
+    <string name="input_hint">Bir cümle yaz… (ör. Güneşli bir günde kuşlar uçuyor, araba yolda gidiyor)</string>
+    <string name="animate">Canlandır</string>
+    <string name="clear">Temizle</string>
+    <string name="empty_warning">Önce bir metin yaz</string>
+</resources>
