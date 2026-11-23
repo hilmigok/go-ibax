@@ -14,6 +14,7 @@ import android.graphics.Typeface
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
+import java.util.WeakHashMap
 import kotlin.random.Random
 
 /**
@@ -46,6 +47,22 @@ class FrameRenderer {
     private var captionLayout: StaticLayout? = null
     private var captionKey = ""
 
+    private val patchCache = WeakHashMap<Bitmap, List<FacePatch>>()
+    private val meshVerts = FloatArray((MESH + 1) * (MESH + 1) * 2)
+    private val tmp = FloatArray(2)
+    private val meshPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+        colorFilter = ColorMatrixColorFilter(cinematicMatrix())
+    }
+
+    /** Mimik uygulanacak tek bir yüz: kaynak görüntüden kesilmiş parça + esnetme hesabı. */
+    private class FacePatch(val left: Int, val top: Int, val bitmap: Bitmap, val rig: FaceRig) {
+        var mimic: Mimic? = null
+        var expression: Expression? = null
+    }
+
+    /** Mimikler açık mı (yüz bulunamayan karelerde zaten bir şey yapılmaz). */
+    var mimics = true
+
     private var vignetteW = 0
     private var vignetteH = 0
 
@@ -58,11 +75,20 @@ class FrameRenderer {
     /**
      * @param images her karenin görüntüsü; henüz üretilmemiş olanlar null.
      */
-    fun draw(canvas: Canvas, board: Storyboard, images: List<Bitmap?>, timeline: Timeline, t: Float, w: Int, h: Int, captions: Boolean) {
+    fun draw(
+        canvas: Canvas, board: Storyboard, images: List<Bitmap?>, timeline: Timeline, t: Float, w: Int, h: Int,
+        captions: Boolean, faces: List<List<FaceRig>> = emptyList()
+    ) {
         canvas.drawColor(Color.BLACK)
         val f = timeline.at(t)
-        drawShot(canvas, board, images, f.index, f.progress, 1f, t, w, h)
-        if (f.next != null) drawShot(canvas, board, images, f.next, f.nextProgress, f.nextAlpha, t, w, h)
+        drawShot(canvas, board, images, faces, f.index, f.progress, 1f, t, w, h)
+        if (f.next != null) {
+            // Geçişte kare bir katmana tam opak çizilip katman bütün olarak saydamlaştırılır;
+            // böylece yüz parçaları alttaki görüntüyle çift kat görünmez.
+            val save = canvas.saveLayerAlpha(0f, 0f, w.toFloat(), h.toFloat(), (f.nextAlpha * 255).toInt())
+            drawShot(canvas, board, images, faces, f.next, f.nextProgress, 1f, t, w, h)
+            canvas.restoreToCount(save)
+        }
 
         drawVignette(canvas, w, h)
         drawGrain(canvas, t, w, h)
@@ -73,7 +99,10 @@ class FrameRenderer {
         }
     }
 
-    private fun drawShot(canvas: Canvas, board: Storyboard, images: List<Bitmap?>, i: Int, progress: Float, alpha: Float, t: Float, w: Int, h: Int) {
+    private fun drawShot(
+        canvas: Canvas, board: Storyboard, images: List<Bitmap?>, faces: List<List<FaceRig>>,
+        i: Int, progress: Float, alpha: Float, t: Float, w: Int, h: Int
+    ) {
         val shot = board.shots[i]
         val bmp = images.getOrNull(i)
         val a = (alpha * 255).toInt().coerceIn(0, 255)
@@ -84,11 +113,52 @@ class FrameRenderer {
             matrix.postTranslate(p[0], p[1])
             imagePaint.alpha = a
             canvas.drawBitmap(bmp, matrix, imagePaint)
+            val rigs = faces.getOrNull(i).orEmpty()
+            if (mimics && rigs.isNotEmpty()) drawFaces(canvas, bmp, rigs, shot.expression, t, progress, a)
         } else {
             dotPaint.color = Color.argb(a, 24, 24, 28)
             canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), dotPaint)
         }
         drawEffect(canvas, shot.effect, t, alpha, w, h)
+    }
+
+    /** Yüz parçalarını esnetilmiş bir ağ (mesh) olarak görüntünün üstüne çizer. */
+    private fun drawFaces(canvas: Canvas, bmp: Bitmap, rigs: List<FaceRig>, expression: Expression, t: Float, progress: Float, alpha: Int) {
+        val patches = patchCache.getOrPut(bmp) {
+            rigs.mapNotNull { rig ->
+                val r = rig.patch(bmp.width, bmp.height)
+                val pw = r[2] - r[0]
+                val ph = r[3] - r[1]
+                if (pw < 8 || ph < 8) null
+                else FacePatch(r[0], r[1], Bitmap.createBitmap(bmp, r[0], r[1], pw, ph), rig)
+            }
+        }
+        if (patches.isEmpty()) return
+        canvas.save()
+        canvas.concat(matrix)
+        meshPaint.alpha = alpha
+        for (p in patches) {
+            if (p.bitmap.isRecycled) continue
+            val m = p.mimic?.takeIf { p.expression == expression } ?: Mimic(p.rig, expression).also {
+                p.mimic = it
+                p.expression = expression
+            }
+            m.prepare(t, progress)
+            val pw = p.bitmap.width.toFloat()
+            val ph = p.bitmap.height.toFloat()
+            var k = 0
+            for (row in 0..MESH) {
+                val v = row.toFloat() / MESH
+                for (col in 0..MESH) {
+                    val u = col.toFloat() / MESH
+                    m.displace(p.left + u * pw, p.top + v * ph, Mimic.window(u, v), tmp)
+                    meshVerts[k++] = tmp[0]
+                    meshVerts[k++] = tmp[1]
+                }
+            }
+            canvas.drawBitmapMesh(p.bitmap, MESH, MESH, meshVerts, 0, null, 0, meshPaint)
+        }
+        canvas.restore()
     }
 
     private fun drawEffect(canvas: Canvas, effect: Effect, t: Float, alpha: Float, w: Int, h: Int) {
@@ -185,6 +255,7 @@ class FrameRenderer {
 
     companion object {
         private const val NOISE_SIZE = 256
+        private const val MESH = 24
 
         private fun cinematicMatrix(): ColorMatrix {
             val sat = ColorMatrix().apply { setSaturation(0.9f) }

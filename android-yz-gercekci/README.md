@@ -34,6 +34,33 @@ Metin ──► Gemini (yönetmen) ──► Senaryo: N çekim, her biri için a
 4. **Video:** Kareler kamera hareketi ve atmosfer efektleriyle canlandırılır. Önizleme ile
    video aynı çizim kodunu kullanır; video, önizlemenin birebir aynısıdır.
 
+## Sesler (v2)
+
+- **Gerçek ses kayıtları:** Gemini her kare için "ne duyulur" sorusunu yanıtlar (ör. *wind ruins*,
+  *woman crying*, *distant explosions*). Uygulama bu sözcüklerle **Freesound.org**'da yalnızca
+  **CC0 (telifsiz, atıf gerektirmeyen)** kayıtları arar, indirir ve kareye yerleştirir.
+  Ücretsiz Freesound anahtarı: https://freesound.org/apiv2/apply → Ayarlar'a yaz.
+- **Anahtar yoksa da ses var:** rüzgâr, yağmur, ateş çıtırtısı, uzak patlamalar, şehir uğultusu ve
+  kuş sesleri cihazda sıfırdan sentezlenir (`Synth.kt`).
+- **Fon müziği:** filmin havasına göre (hüzünlü, karanlık, epik, gergin, umutlu) cihazda bestelenir.
+- **Anlatıcı:** Gemini'nin gerçekçi sesiyle Türkçe seslendirme (`gemini-2.5-flash-preview-tts`). Kare
+  süreleri anlatıma göre uzar; anlatıcı konuşurken ortam sesi ve müzik otomatik kısılır.
+- Hepsi karıştırılıp videoya **AAC ses kanalı** olarak eklenir; önizlemede de duyulur.
+
+## Mimikler (v2)
+
+Karakterler yapay zekânın ürettiği fotoğraflar olduğu için mimikler fotoğrafın üstünde yapılır
+(Blender gibi 3D araçlar burada işe yaramaz):
+
+1. **Google ML Kit** yüzleri ve göz/ağız noktalarını bulur (cihaz içinde, ücretsiz, internetsiz).
+2. Yüz bölgesi ince bir ağ (mesh) ile esnetilir: **göz kırpma**, **nefes**, hafif **baş hareketi**
+   ve Gemini'nin seçtiği duyguya göre ifade: *hüzün* (kaşların içi kalkar, ağız köşeleri düşer),
+   *ağlama* (kısık gözler, titreyen dudak, hıçkırık nefesi), *korku*, *öfke*, *şaşkınlık*, *gülümseme*.
+3. Esneme bölge kenarında sıfıra iner; yüz, fotoğrafın geri kalanıyla dikişsiz birleşir.
+
+Uzak/küçük yüzlere mimik uygulanmaz. Ana ekrandaki anahtarlarla ses, anlatıcı ve mimikler ayrı
+ayrı kapatılabilir.
+
 Bir kareyi beğenmediysen küçük resmine dokun. Tarifi düzenleyip yalnızca o kareyi
 yeniden üretebilir ya da fotoğrafı tek başına kaydedebilirsin.
 
@@ -76,7 +103,10 @@ yeniden üretebilir ya da fotoğrafı tek başına kaydedebilirsin.
 | `Timeline.kt` | Zaman çizelgesi, çapraz geçiş, Ken Burns hesapları |
 | `Particles.kt` | Deterministik atmosfer parçacıkları |
 | `FrameRenderer.kt` | Bir video karesini çizer (önizleme + video ortak) |
-| `VideoExporter.kt` | Canvas → OpenGL dokusu → H.264 MP4 → galeri |
+| `VideoExporter.kt` | Canvas → OpenGL dokusu → H.264 + AAC ses → MP4 → galeri |
+| `FaceFinder.kt` / `Mimic.kt` | Yüz noktaları (ML Kit) / mimik esnetme hesabı |
+| `FreesoundClient.kt` / `AudioDecoder.kt` | CC0 ses arama-indirme / MP3 → PCM |
+| `Synth.kt` / `Soundtrack.kt` | Ortam sesi ve müzik sentezi / karıştırma, ducking |
 
 ## Geliştirme
 

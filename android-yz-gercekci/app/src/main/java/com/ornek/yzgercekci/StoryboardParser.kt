@@ -31,11 +31,15 @@ object StoryboardParser {
                 caption = o.optString("caption").trim().take(80),
                 camera = CameraMove.from(o.optString("camera")),
                 effect = Effect.from(o.optString("effect")),
-                duration = if (d.isNaN()) 4f else d.coerceIn(MIN_DURATION, MAX_DURATION)
+                duration = if (d.isNaN()) 4f else d.coerceIn(MIN_DURATION, MAX_DURATION),
+                expression = Expression.from(o.optString("expression")),
+                sound = o.optString("sound").trim().take(60),
+                ambience = Ambience.from(o.optString("ambience")),
+                narration = o.optString("narration").trim().take(220)
             )
         }
         if (shots.isEmpty()) throw StoryboardException("Senaryoda geçerli sahne yok. Tekrar dene.")
         val title = root.optString("title").trim().take(48).ifEmpty { "Sahne" }
-        return Storyboard(title, shots)
+        return Storyboard(title, shots, Music.from(root.optString("music")))
     }
 }

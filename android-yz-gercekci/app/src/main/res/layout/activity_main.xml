@@ -169,6 +169,27 @@
             android:checked="true"
             android:text="@string/captions" />
 
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/sounds"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checked="true"
+            android:text="@string/sounds" />
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/narration"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checked="true"
+            android:text="@string/narration" />
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/mimics"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checked="true"
+            android:text="@string/mimics" />
+
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnGenerate"
             android:layout_width="match_parent"

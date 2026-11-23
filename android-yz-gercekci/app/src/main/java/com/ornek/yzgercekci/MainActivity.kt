@@ -30,6 +30,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var board: Storyboard? = null
     private val images = ArrayList<Bitmap?>()
+    private val faces = ArrayList<List<FaceRig>>()
+    private var soundtrack: ShortArray? = null
+    private val player = AudioPlayer()
     private var boardPortrait = true          // senaryo/görsellerin üretildiği yön
     private var format = VideoFormat.PORTRAIT_9_16
     private var style = VisualStyle.CINEMATIC
@@ -60,6 +63,8 @@ class MainActivity : AppCompatActivity() {
         binding.shotCountLabel.text = getString(R.string.shot_count, binding.shotCount.value.toInt())
 
         binding.captions.setOnCheckedChangeListener { _, checked -> binding.preview.captions = checked }
+        binding.mimics.setOnCheckedChangeListener { _, checked -> binding.preview.mimics = checked }
+        binding.sounds.setOnCheckedChangeListener { _, _ -> restartPlayback() }
 
         binding.btnSettings.setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
         binding.btnGenerate.setOnClickListener { generateAll() }
@@ -68,8 +73,35 @@ class MainActivity : AppCompatActivity() {
         binding.btnCancel.setOnClickListener { job?.cancel() }
 
         binding.root.post { applyPreviewSize() }
-        binding.preview.setContent(null, emptyList())
+        binding.preview.setContent(null, emptyList(), emptyList())
         updateButtons()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        restartPlayback()
+    }
+
+    override fun onPause() {
+        player.stop()
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        player.stop()
+        super.onDestroy()
+    }
+
+    /** Önizlemeyi ve sesi birlikte baştan başlatır. */
+    private fun restartPlayback() {
+        player.stop()
+        val pcm = soundtrack
+        if (binding.sounds.isChecked && pcm != null && board != null) player.play(pcm)
+        binding.preview.restart()
+    }
+
+    private fun showContent() {
+        binding.preview.setContent(board, images, faces.toList())
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -120,6 +152,7 @@ class MainActivity : AppCompatActivity() {
         val portrait = format.isPortrait
         val count = binding.shotCount.value.toInt()
         val captions = binding.captions.isChecked
+        val narration = binding.narration.isChecked && binding.sounds.isChecked
         val chosenStyle = style
         hideKeyboard()
 
@@ -131,7 +164,7 @@ class MainActivity : AppCompatActivity() {
                     retrying {
                         val json = client.generateStoryboard(
                             store.textModel,
-                            StoryboardPrompt.userMessage(text, count, portrait, captions)
+                            StoryboardPrompt.userMessage(text, count, portrait, captions, narration)
                         )
                         StoryboardParser.parse(json)
                     }
@@ -140,8 +173,9 @@ class MainActivity : AppCompatActivity() {
                 board = newBoard
                 boardPortrait = portrait
                 images.addAll(List(newBoard.shots.size) { null })
+                faces.addAll(List(newBoard.shots.size) { emptyList() })
                 rebuildThumbs()
-                binding.preview.setContent(newBoard, images)
+                showContent()
 
                 var failures = 0
                 var lastError = ""
@@ -159,11 +193,29 @@ class MainActivity : AppCompatActivity() {
                         ) throw e
                     }
                     rebuildThumbs()
-                    binding.preview.setContent(newBoard, images)
+                    showContent()
                 }
+
+                // Mimikler için yüzleri bul (cihaz içinde, ücretsiz).
+                setBusy(true, getString(R.string.status_faces), indeterminate = true)
+                detectFaces()
+
+                // Sesler: gerçek kayıtlar / sentez, fon müziği, anlatıcı.
+                var soundNote = ""
+                if (binding.sounds.isChecked) {
+                    val (fitted, pcm, note) = buildSound(client, store, board ?: newBoard, narration)
+                    board = fitted
+                    soundtrack = pcm
+                    soundNote = note
+                    showContent()
+                }
+                restartPlayback()
                 setBusy(false)
+                val b = board ?: newBoard
                 binding.status.text = if (failures == 0) {
-                    getString(R.string.status_ready, newBoard.title)
+                    if (soundNote.isNotEmpty() || faces.any { it.isNotEmpty() }) {
+                        getString(R.string.status_ready_sound, b.title, faces.sumOf { it.size }, soundNote)
+                    } else getString(R.string.status_ready, b.title)
                 } else {
                     getString(R.string.status_partial, failures, lastError)
                 }
@@ -174,6 +226,82 @@ class MainActivity : AppCompatActivity() {
                 binding.status.text = getString(R.string.error_prefix, e.message ?: e.javaClass.simpleName)
             }
         }
+    }
+
+    private suspend fun detectFaces(only: Int? = null) {
+        for (i in images.indices) {
+            if (only != null && i != only) continue
+            val bmp = images[i]
+            val found = if (bmp == null) emptyList() else withContext(Dispatchers.Default) { FaceFinder.find(bmp) }
+            while (faces.size <= i) faces.add(emptyList())
+            faces[i] = found
+        }
+        showContent()
+    }
+
+    private data class SoundResult(val board: Storyboard, val pcm: ShortArray, val note: String)
+
+    /**
+     * Anlatıcı sesini üretir, kare sürelerini ona göre ayarlar, her kare için gerçek bir ses
+     * kaydı arar (Freesound CC0; yoksa sentez), fon müziğini üretir ve hepsini karıştırır.
+     */
+    private suspend fun buildSound(client: GeminiClient, store: SecretStore, b: Storyboard, narration: Boolean): SoundResult {
+        val n = b.shots.size
+        val voices = ArrayList<FloatArray?>()
+        var voiceError = ""
+        for ((i, shot) in b.shots.withIndex()) {
+            if (!narration || shot.narration.isEmpty() || voiceError.isNotEmpty()) { voices += null; continue }
+            binding.status.text = getString(R.string.status_voice, i + 1, n)
+            voices += try {
+                withContext(Dispatchers.IO) { retrying { client.generateSpeech(store.ttsModel, store.voice, shot.narration) } }
+            } catch (e: GeminiException) {
+                voiceError = e.message.orEmpty()   // bir kez başarısız olursa diğerlerini deneme
+                null
+            }
+        }
+        val fitted = Soundtrack.fitDurations(b, voices.map { (it?.size ?: 0).toFloat() / Soundtrack.SR })
+
+        val fs = store.freesoundKey.takeIf { it.isNotBlank() }?.let { FreesoundClient(it) }
+        val cache = HashMap<String, FloatArray?>()
+        val ambience = ArrayList<FloatArray?>()
+        var real = 0
+        for ((i, shot) in fitted.shots.withIndex()) {
+            binding.status.text = getString(R.string.status_sound, i + 1, n)
+            var clip: FloatArray? = null
+            if (fs != null && shot.sound.isNotEmpty()) {
+                clip = cache.getOrPut(shot.sound.lowercase()) {
+                    withContext(Dispatchers.IO) { fetchFreesound(fs, shot.sound) }
+                }
+                if (clip != null) real++
+            }
+            ambience += clip ?: withContext(Dispatchers.Default) {
+                Synth.ambience(shot.ambience, maxOf(8f, shot.duration), seed = i + 1)
+            }
+        }
+
+        binding.status.text = getString(R.string.status_mixing)
+        val pcm = withContext(Dispatchers.Default) {
+            val tl = Timeline(fitted.shots.map { it.duration })
+            Soundtrack.mix(tl, ambience, Synth.music(fitted.music, tl.total), voices)
+        }
+        var note = if (real > 0) getString(R.string.sound_real, real) else getString(R.string.sound_synth)
+        if (voiceError.isNotEmpty()) note += " · anlatıcı yok: ${voiceError.take(90)}"
+        return SoundResult(fitted, pcm, note)
+    }
+
+    /** Freesound'da arar; ilk çözülebilen kaydı döngüye uygun hale getirip döndürür. */
+    private fun fetchFreesound(fs: FreesoundClient, query: String): FloatArray? {
+        val hits = try { fs.search(query) } catch (e: Exception) { return null }
+        for (hit in hits.take(3)) {
+            try {
+                val file = fs.download(hit, cacheDir)
+                val pcm = AudioDecoder.decode(file)
+                if (pcm.size > Soundtrack.SR * 2) return Soundtrack.makeLoopable(Synth.normalize(pcm, 0.8f))
+            } catch (e: Exception) {
+                // sıradaki kayda geç
+            }
+        }
+        return null
     }
 
     /** Tek bir kareyi üretir; tutarlılık açıksa en yakın önceki kareyi referans gönderir. */
@@ -251,8 +379,9 @@ class MainActivity : AppCompatActivity() {
                 board = updated
                 images[i]?.let { old -> binding.preview.post { old.recycle() } }
                 images[i] = bmp
+                faces[i] = withContext(Dispatchers.Default) { FaceFinder.find(bmp) }
                 rebuildThumbs()
-                binding.preview.setContent(updated, images)
+                showContent()
                 setBusy(false, getString(R.string.status_ready, updated.title))
             } catch (e: kotlinx.coroutines.CancellationException) {
                 setBusy(false, getString(R.string.status_cancelled))
@@ -271,13 +400,17 @@ class MainActivity : AppCompatActivity() {
         val targetFormat = format
         val captions = binding.captions.isChecked
         val snapshot = images.toList()
+        val faceSnapshot = faces.toList()
+        val mimics = binding.mimics.isChecked
+        val audio = soundtrack.takeIf { binding.sounds.isChecked }
         job = lifecycleScope.launch {
             setBusy(true, getString(R.string.status_exporting, 0), indeterminate = false)
             binding.btnCancel.visibility = View.GONE   // kodlama yarıda kesilemez
             binding.preview.playing = false
+            player.stop()
             try {
                 val uri = withContext(Dispatchers.Default) {
-                    VideoExporter(applicationContext).export(b, snapshot, targetFormat, captions) { p ->
+                    VideoExporter(applicationContext).export(b, snapshot, targetFormat, captions, faceSnapshot, mimics, audio) { p ->
                         val pct = (p * 100).toInt()
                         binding.root.post {
                             binding.progress.setProgressCompat(pct, true)
@@ -292,6 +425,7 @@ class MainActivity : AppCompatActivity() {
                 binding.status.text = getString(R.string.error_prefix, e.message ?: e.javaClass.simpleName)
             } finally {
                 binding.preview.playing = true
+                restartPlayback()
             }
         }
     }
@@ -337,6 +471,9 @@ class MainActivity : AppCompatActivity() {
     // ---------------------------------------------------------------- arayüz
 
     private fun clearImages() {
+        player.stop()
+        soundtrack = null
+        faces.clear()
         val old = images.toList()
         images.clear()
         // Önizleme eski bitmap'leri çizmeyi bıraktıktan sonra serbest bırak.

@@ -12,8 +12,8 @@ android {
         // 29+: video ve fotoğrafları izin istemeden galeriye (MediaStore) kaydedebilmek için
         minSdk = 29
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "2.0"
     }
 
     buildTypes {
@@ -48,6 +48,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("androidx.security:security-crypto:1.0.0")
+    // Yüz ve göz/ağız noktaları (cihaz içinde, ücretsiz) — mimikler için
+    implementation("com.google.mlkit:face-detection:16.1.6")
 
     testImplementation("junit:junit:4.13.2")
     // Android'in org.json'u birim testlerde boş taslaktır; gerçeğini ekliyoruz.

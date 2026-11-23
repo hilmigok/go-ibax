@@ -15,6 +15,10 @@ class PreviewView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     private var board: Storyboard? = null
     private var images: List<Bitmap?> = emptyList()
     private var timeline: Timeline? = null
+    private var faces: List<List<FaceRig>> = emptyList()
+    var mimics: Boolean
+        get() = renderer.mimics
+        set(value) { renderer.mimics = value }
     private var startNanos = 0L
     var captions = true
     var playing = true
@@ -28,12 +32,19 @@ class PreviewView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         textAlign = Paint.Align.CENTER
     }
 
-    fun setContent(board: Storyboard?, images: List<Bitmap?>) {
+    fun setContent(board: Storyboard?, images: List<Bitmap?>, faces: List<List<FaceRig>> = this.faces) {
         val restart = board !== this.board
         this.board = board
         this.images = images
+        this.faces = faces
         timeline = board?.let { Timeline(it.shots.map { s -> s.duration }) }
         if (restart) startNanos = System.nanoTime()
+        invalidate()
+    }
+
+    /** Önizlemeyi baştan başlatır (sesle eşzamanlamak için). */
+    fun restart() {
+        startNanos = System.nanoTime()
         invalidate()
     }
 
@@ -47,7 +58,7 @@ class PreviewView @JvmOverloads constructor(context: Context, attrs: AttributeSe
             return
         }
         val t = ((System.nanoTime() - startNanos) / 1e9f) % tl.total
-        renderer.draw(canvas, b, images, tl, t, width, height, captions)
+        renderer.draw(canvas, b, images, tl, t, width, height, captions, faces)
         if (playing && isShown) postInvalidateOnAnimation()
     }
 

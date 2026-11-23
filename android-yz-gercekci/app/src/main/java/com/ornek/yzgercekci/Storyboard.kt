@@ -32,18 +32,72 @@ enum class Effect(val key: String) {
     }
 }
 
+/** Karakterlerin yüzüne uygulanacak mimik. */
+enum class Expression(val key: String) {
+    NEUTRAL("neutral"),
+    SAD("sad"),
+    CRYING("crying"),
+    FEAR("fear"),
+    ANGRY("angry"),
+    SHOCK("shock"),
+    SMILE("smile");
+
+    companion object {
+        fun from(s: String?): Expression =
+            entries.firstOrNull { it.key == s?.trim()?.lowercase() } ?: NEUTRAL
+    }
+}
+
+/** Ses bulunamazsa cihazda sentezlenecek ortam sesi türü. */
+enum class Ambience(val key: String) {
+    SILENCE("silence"),
+    WIND("wind"),
+    RAIN("rain"),
+    FIRE("fire"),
+    WAR("war"),
+    CITY("city"),
+    NATURE("nature");
+
+    companion object {
+        fun from(s: String?): Ambience =
+            entries.firstOrNull { it.key == s?.trim()?.lowercase() } ?: WIND
+    }
+}
+
+/** Fon müziğinin havası (cihazda sentezlenir). */
+enum class Music(val key: String) {
+    NONE("none"),
+    DARK("dark"),
+    SAD("sad"),
+    EPIC("epic"),
+    TENSE("tense"),
+    HOPEFUL("hopeful");
+
+    companion object {
+        fun from(s: String?): Music =
+            entries.firstOrNull { it.key == s?.trim()?.lowercase() } ?: SAD
+    }
+}
+
 /** Senaryodaki tek bir sahne/kare. [prompt] görüntü modeline giden İngilizce tariftir. */
 data class Shot(
     val prompt: String,
     val caption: String,
     val camera: CameraMove,
     val effect: Effect,
-    val duration: Float
+    val duration: Float,
+    val expression: Expression = Expression.NEUTRAL,
+    /** Freesound'da aranacak İngilizce ses sözcükleri (ör. "wind ruins"). */
+    val sound: String = "",
+    val ambience: Ambience = Ambience.WIND,
+    /** Anlatıcının bu karede okuyacağı Türkçe cümle (boş olabilir). */
+    val narration: String = ""
 )
 
 data class Storyboard(
     val title: String,
-    val shots: List<Shot>
+    val shots: List<Shot>,
+    val music: Music = Music.SAD
 )
 
 /** Kullanıcının seçebileceği görsel üslup; [suffix] her görüntü tarifinin sonuna eklenir. */

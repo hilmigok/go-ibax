@@ -33,7 +33,25 @@ class SecretStore(context: Context) {
         get() = prefs.getBoolean(KEY_CONSISTENCY, true)
         set(value) = prefs.edit().putBoolean(KEY_CONSISTENCY, value).apply()
 
+    /** Freesound.org API anahtarı (ücretsiz, gerçek ses kayıtları için). */
+    var freesoundKey: String
+        get() = prefs.getString(KEY_FREESOUND, "").orEmpty()
+        set(value) = prefs.edit().putString(KEY_FREESOUND, value.trim()).apply()
+
+    var ttsModel: String
+        get() = prefs.getString(KEY_TTS_MODEL, "").orEmpty().ifBlank { DEFAULT_TTS_MODEL }
+        set(value) = prefs.edit().putString(KEY_TTS_MODEL, value.trim()).apply()
+
+    var voice: String
+        get() = prefs.getString(KEY_VOICE, "").orEmpty().ifBlank { DEFAULT_VOICE }
+        set(value) = prefs.edit().putString(KEY_VOICE, value.trim()).apply()
+
     companion object {
+        private const val KEY_FREESOUND = "freesound_key"
+        private const val KEY_TTS_MODEL = "tts_model"
+        private const val KEY_VOICE = "tts_voice"
+        const val DEFAULT_TTS_MODEL = "gemini-2.5-flash-preview-tts"
+        const val DEFAULT_VOICE = "Charon"
         private const val KEY_API = "gemini_api_key"
         private const val KEY_TEXT_MODEL = "text_model"
         private const val KEY_IMAGE_MODEL = "image_model"

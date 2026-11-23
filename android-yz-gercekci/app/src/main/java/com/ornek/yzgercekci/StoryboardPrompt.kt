@@ -10,13 +10,18 @@ photorealistic shots that an AI image model will render, which will then be anim
 Return ONLY a JSON object with this exact shape:
 {
   "title": "short Turkish title (max 40 chars)",
+  "music": "none | dark | sad | epic | tense | hopeful",
   "shots": [
     {
       "prompt": "ENGLISH image prompt, 60-120 words",
       "caption": "optional short Turkish caption (max 60 chars) or empty string",
       "camera": "zoom_in | zoom_out | pan_left | pan_right | pan_up | pan_down | static",
       "effect": "none | dust | smoke | fog | rain | snow | embers",
-      "duration": 3.5
+      "duration": 3.5,
+      "expression": "neutral | sad | crying | fear | angry | shock | smile",
+      "sound": "2-4 English words to search a realistic sound effect library",
+      "ambience": "silence | wind | rain | fire | war | city | nature",
+      "narration": "Turkish voice-over sentence for this shot, or empty string"
     }
   ]
 }
@@ -43,12 +48,22 @@ Other rules:
 - "effect": choose an atmosphere overlay that matches the scene (ruins → dust or smoke,
   fire → embers, storm → rain).
 - "duration": seconds between 3 and 6.
+- "expression": the dominant facial expression of the characters in the shot (faces will be
+  subtly animated). Use "neutral" when no face is clearly visible.
+- "sound": what you would HEAR in this shot, as short search words for a sound library, e.g.
+  "wind ruins", "distant explosions", "woman crying", "crowd panic", "heavy rain", "fire crackling".
+- "ambience": the closest background category (used if no recording is found).
+- "music": the emotional tone of the background score for the whole film.
 - Use exactly the requested number of shots."""
 
-    fun userMessage(text: String, shotCount: Int, portrait: Boolean, captions: Boolean): String {
+    fun userMessage(text: String, shotCount: Int, portrait: Boolean, captions: Boolean, narration: Boolean = false): String {
         val ratio = if (portrait) "vertical 9:16 (TikTok / Reels / Shorts)" else "horizontal 16:9 (YouTube)"
         val cap = if (captions) "Write a short Turkish caption for each shot." else "Leave every caption empty."
-        return "Number of shots: $shotCount\nAspect ratio: $ratio\n$cap\n\nUser's description:\n$text"
+        val nar = if (narration) {
+            "Write an emotional Turkish voice-over: one short sentence (max 15 words) per shot, " +
+                "together telling the story like a documentary narrator."
+        } else "Leave every narration empty."
+        return "Number of shots: $shotCount\nAspect ratio: $ratio\n$cap\n$nar\n\nUser's description:\n$text"
     }
 
     /** Görüntü modeline gönderilecek son tarif: senaryodaki tarif + üslup + oran ipucu. */

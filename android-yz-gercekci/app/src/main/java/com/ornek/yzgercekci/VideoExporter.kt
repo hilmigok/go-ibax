@@ -40,6 +40,9 @@ class VideoExporter(private val context: Context) {
         images: List<Bitmap?>,
         videoFormat: VideoFormat,
         captions: Boolean,
+        faces: List<List<FaceRig>> = emptyList(),
+        mimics: Boolean = true,
+        audio: ShortArray? = null,
         onProgress: (Float) -> Unit
     ): Uri {
         val width = videoFormat.width
@@ -60,6 +63,10 @@ class VideoExporter(private val context: Context) {
 
         val muxer = MediaMuxer(tmp.path, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
         val state = MuxState()
+        // Ses önceden AAC'ye kodlanır; video kodlayıcısı biçimini bildirince ikisi birlikte yazılır.
+        if (audio != null && audio.isNotEmpty()) {
+            runCatching { encodeAac(audio, state) }.onFailure { state.audioFormat = null; state.audioSamples.clear() }
+        }
         var egl: EglWindow? = null
         var frameBitmap: Bitmap? = null
         var success = false
@@ -71,12 +78,12 @@ class VideoExporter(private val context: Context) {
             val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
             frameBitmap = bmp
             val canvas = Canvas(bmp)
-            val renderer = FrameRenderer()
+            val renderer = FrameRenderer().also { it.mimics = mimics }
 
             val total = (timeline.total * FPS).roundToInt().coerceAtLeast(1)
             for (i in 0 until total) {
                 drain(encoder, muxer, state, endOfStream = false)
-                renderer.draw(canvas, board, images, timeline, i.toFloat() / FPS, width, height, captions)
+                renderer.draw(canvas, board, images, timeline, i.toFloat() / FPS, width, height, captions, faces)
                 GLES20.glViewport(0, 0, width, height)
                 blitter.draw(bmp)
                 egl.setPresentationTime(i * 1_000_000_000L / FPS)
@@ -108,6 +115,66 @@ class VideoExporter(private val context: Context) {
     private class MuxState {
         var track = -1
         var started = false
+        var audioFormat: MediaFormat? = null
+        val audioSamples = ArrayList<Pair<ByteArray, MediaCodec.BufferInfo>>()
+    }
+
+    /** Mono 16 bit PCM'i AAC-LC'ye kodlar ve örnekleri belleğe alır. */
+    private fun encodeAac(pcm: ShortArray, state: MuxState) {
+        val fmt = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, Soundtrack.SR, 1).apply {
+            setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
+            setInteger(MediaFormat.KEY_BIT_RATE, 160_000)
+            setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 16384)
+        }
+        val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC)
+        codec.configure(fmt, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+        codec.start()
+        try {
+            var pos = 0
+            var inputDone = false
+            val info = MediaCodec.BufferInfo()
+            var idle = 0
+            while (true) {
+                if (!inputDone) {
+                    val idx = codec.dequeueInputBuffer(10_000)
+                    if (idx >= 0) {
+                        val buf = codec.getInputBuffer(idx)!!
+                        buf.clear()
+                        val n = minOf(pcm.size - pos, buf.capacity() / 2, 4096)
+                        val pts = pos * 1_000_000L / Soundtrack.SR
+                        if (n <= 0) {
+                            codec.queueInputBuffer(idx, 0, 0, pts, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                            inputDone = true
+                        } else {
+                            buf.order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().put(pcm, pos, n)
+                            codec.queueInputBuffer(idx, 0, n * 2, pts, 0)
+                            pos += n
+                        }
+                    }
+                }
+                val out = codec.dequeueOutputBuffer(info, 10_000)
+                when {
+                    out == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> state.audioFormat = codec.outputFormat
+                    out >= 0 -> {
+                        idle = 0
+                        val buf = codec.getOutputBuffer(out)!!
+                        if (info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0 && info.size > 0) {
+                            val bytes = ByteArray(info.size)
+                            buf.position(info.offset)
+                            buf.get(bytes)
+                            val copy = MediaCodec.BufferInfo().apply { set(0, info.size, info.presentationTimeUs, info.flags) }
+                            state.audioSamples += bytes to copy
+                        }
+                        codec.releaseOutputBuffer(out, false)
+                        if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
+                    }
+                    out == MediaCodec.INFO_TRY_AGAIN_LATER && inputDone -> if (++idle > 500) throw IOException("Ses kodlayıcı yanıt vermiyor")
+                }
+            }
+        } finally {
+            runCatching { codec.stop() }
+            codec.release()
+        }
     }
 
     private fun drain(encoder: MediaCodec, muxer: MediaMuxer, state: MuxState, endOfStream: Boolean) {
@@ -124,8 +191,14 @@ class VideoExporter(private val context: Context) {
                 index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                     if (state.started) throw IOException("Video biçimi beklenmedik şekilde değişti")
                     state.track = muxer.addTrack(encoder.outputFormat)
+                    val af = state.audioFormat
+                    val audioTrack = if (af != null && state.audioSamples.isNotEmpty()) muxer.addTrack(af) else -1
                     muxer.start()
                     state.started = true
+                    if (audioTrack >= 0) {
+                        for ((bytes, bi) in state.audioSamples) muxer.writeSampleData(audioTrack, ByteBuffer.wrap(bytes), bi)
+                        state.audioSamples.clear()
+                    }
                 }
                 index >= 0 -> {
                     val buffer = encoder.getOutputBuffer(index)

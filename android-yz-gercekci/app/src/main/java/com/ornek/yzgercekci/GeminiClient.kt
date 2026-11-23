@@ -78,6 +78,31 @@ class GeminiClient(private val apiKey: String) {
         }
     }
 
+    /**
+     * Gemini'nin gerçekçi sesiyle Türkçe anlatım üretir.
+     * @return mono PCM, -1..1, [Soundtrack.SR] Hz
+     */
+    fun generateSpeech(model: String, voice: String, text: String): FloatArray {
+        val instruction = "Aşağıdaki cümleyi duygulu, yavaş, alçak ve etkileyici bir belgesel anlatıcısı " +
+            "gibi Türkçe oku: "
+        val body = JSONObject().apply {
+            put("contents", JSONArray().put(userContent(JSONArray().put(JSONObject().put("text", instruction + text)))))
+            put(
+                "generationConfig", JSONObject()
+                    .put("responseModalities", JSONArray().put("AUDIO"))
+                    .put(
+                        "speechConfig", JSONObject().put(
+                            "voiceConfig", JSONObject().put(
+                                "prebuiltVoiceConfig", JSONObject().put("voiceName", voice.trim().ifEmpty { "Charon" })
+                            )
+                        )
+                    )
+            )
+        }
+        val (pcm, rate) = extractAudio(post(endpoint(model, "generateContent"), body))
+        return Soundtrack.resample(Soundtrack.pcm16ToFloat(pcm), rate)
+    }
+
     private fun userContent(parts: JSONArray) = JSONObject().put("role", "user").put("parts", parts)
 
     private fun endpoint(model: String, method: String): URL {
@@ -168,6 +193,26 @@ class GeminiClient(private val apiKey: String) {
                 else -> "Görüntü üretilmedi${if (reason.isNotEmpty()) " ($reason)" else ""}. Tekrar dene."
             }
             throw GeminiException(msg, retryable = modelText.isNotEmpty() || reason.isEmpty())
+        }
+
+        /** TTS cevabındaki ham PCM'i ve örnekleme hızını çıkarır (mimeType: audio/L16;codec=pcm;rate=24000). */
+        fun extractAudio(responseJson: String): Pair<ByteArray, Int> {
+            val root = parseRoot(responseJson)
+            checkBlocked(root)
+            val parts = root.optJSONArray("candidates")?.optJSONObject(0)
+                ?.optJSONObject("content")?.optJSONArray("parts")
+            if (parts != null) {
+                for (i in 0 until parts.length()) {
+                    val p = parts.optJSONObject(i) ?: continue
+                    val inline = p.optJSONObject("inlineData") ?: p.optJSONObject("inline_data") ?: continue
+                    val data = inline.optString("data")
+                    if (data.isEmpty()) continue
+                    val mime = inline.optString("mimeType").ifEmpty { inline.optString("mime_type") }
+                    val rate = Regex("rate=(\\d+)").find(mime)?.groupValues?.get(1)?.toIntOrNull() ?: 24000
+                    return decode(data) to rate
+                }
+            }
+            throw GeminiException("Anlatıcı sesi üretilemedi.", retryable = true)
         }
 
         /** Imagen predict cevabındaki ilk görüntüyü çözer. */

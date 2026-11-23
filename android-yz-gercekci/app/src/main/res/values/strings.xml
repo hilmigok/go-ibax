@@ -5,6 +5,16 @@
     <string name="style_label">Görsel üslup</string>
     <string name="shot_count">Kare sayısı: %1$d</string>
     <string name="captions">Altyazı ekle</string>
+    <string name="sounds">Gerçekçi sesler ve fon müziği</string>
+    <string name="narration">Anlatıcı sesi (Türkçe seslendirme)</string>
+    <string name="mimics">Karakter mimikleri (göz kırpma, nefes, duygu ifadesi)</string>
+    <string name="status_faces">Yüzler ve mimik noktaları bulunuyor…</string>
+    <string name="status_sound">Sesler hazırlanıyor: %1$d / %2$d</string>
+    <string name="status_voice">Anlatıcı seslendiriyor: %1$d / %2$d</string>
+    <string name="status_mixing">Ses karıştırılıyor…</string>
+    <string name="status_ready_sound">Hazır: %1$s · %2$d yüz canlandırıldı · %3$s</string>
+    <string name="sound_real">%1$d gerçek kayıt (Freesound CC0)</string>
+    <string name="sound_synth">sesler cihazda üretildi</string>
     <string name="generate">Senaryo + gerçekçi görseller üret</string>
     <string name="export">Videoyu kaydet ve paylaş</string>
     <string name="save_photos">Fotoğrafları kaydet</string>
@@ -39,6 +49,13 @@
     <string name="image_model_hint">Görüntü modeli</string>
     <string name="image_model_info">Örnekler: gemini-2.5-flash-image (varsayılan), gemini-3-pro-image-preview (daha kaliteli), imagen-4.0-generate-001, imagen-4.0-ultra-generate-001. Görüntü modelleri çoğunlukla AI Studio’da faturalandırma (ücretli plan) açık olmasını ister.</string>
     <string name="consistency">Karakter tutarlılığı (önceki kareyi referans gönder — yalnız Gemini görüntü modellerinde)</string>
+    <string name="sound_settings">Ses</string>
+    <string name="freesound_info">Gerçek ses kayıtları (rüzgâr, patlama, ağlama, kalabalık…) Freesound.org’dan, yalnızca telifsiz CC0 kayıtlar arasından seçilir. Ücretsiz anahtar: https://freesound.org/apiv2/apply
+Anahtar girmezsen sesler cihazda sentezlenir.</string>
+    <string name="freesound_hint">Freesound API anahtarı (isteğe bağlı)</string>
+    <string name="tts_model_hint">Anlatıcı (seslendirme) modeli</string>
+    <string name="voice_hint">Anlatıcı sesi</string>
+    <string name="voice_info">Erkek: Charon (derin), Fenrir, Orus, Puck · Kadın: Kore, Aoede, Leda, Callirrhoe</string>
     <string name="save">Kaydet</string>
     <string name="saved">Kaydedildi</string>
 </resources>
