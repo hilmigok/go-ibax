@@ -56,7 +56,7 @@ class SecretStore(context: Context) {
         private const val KEY_TEXT_MODEL = "text_model"
         private const val KEY_IMAGE_MODEL = "image_model"
         private const val KEY_CONSISTENCY = "consistency"
-        const val DEFAULT_TEXT_MODEL = "gemini-2.5-flash"
+        const val DEFAULT_TEXT_MODEL = "gemini-flash-latest"
         const val DEFAULT_IMAGE_MODEL = "gemini-2.5-flash-image"
     }
 }

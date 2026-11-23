@@ -9,7 +9,22 @@ import java.net.URL
 import java.net.URLEncoder
 import java.util.Base64
 
-class GeminiException(message: String, val retryable: Boolean = false) : Exception(message)
+class GeminiException(
+    message: String,
+    val retryable: Boolean = false,
+    /** HTTP durum kodu (ağ dışı hatalarda 0). */
+    val code: Int = 0,
+    /** Google'ın hata mesajında önerdiği yeni model adı (varsa). */
+    val suggestedModel: String? = null
+) : Exception(message) {
+    /** Model artık yok / bu kullanıcıya kapalı mı? */
+    val modelUnavailable: Boolean
+        get() = code == 404 || (code in 400..403 && (message.orEmpty().contains("no longer available", true) ||
+            message.orEmpty().contains("is not found", true) || message.orEmpty().contains("not supported", true)))
+}
+
+/** Google'ın sunduğu bir model ve desteklediği yöntemler. */
+data class ModelInfo(val name: String, val methods: Set<String>)
 
 /**
  * Google Gemini REST API istemcisi.
@@ -103,6 +118,34 @@ class GeminiClient(private val apiKey: String) {
         return Soundtrack.resample(Soundtrack.pcm16ToFloat(pcm), rate)
     }
 
+    /** Bu API anahtarıyla kullanılabilen modelleri listeler. */
+    fun listModels(): List<ModelInfo> {
+        val out = ArrayList<ModelInfo>()
+        var token = ""
+        repeat(5) {
+            val q = if (token.isEmpty()) "" else "&pageToken=" + URLEncoder.encode(token, "UTF-8")
+            val conn = (URL("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000$q").openConnection() as HttpURLConnection).apply {
+                connectTimeout = 20_000
+                readTimeout = 60_000
+                setRequestProperty("x-goog-api-key", apiKey.trim())
+            }
+            try {
+                val code = conn.responseCode
+                val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                    ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                if (code !in 200..299) throw GeminiException(errorMessage(code, text), code = code)
+                out += parseModels(text)
+                token = try { JSONObject(text).optString("nextPageToken") } catch (e: JSONException) { "" }
+            } catch (e: IOException) {
+                throw GeminiException("Bağlantı hatası: ${e.message ?: "internet bağlantını kontrol et"}", retryable = true)
+            } finally {
+                conn.disconnect()
+            }
+            if (token.isEmpty()) return out
+        }
+        return out
+    }
+
     private fun userContent(parts: JSONArray) = JSONObject().put("role", "user").put("parts", parts)
 
     private fun endpoint(model: String, method: String): URL {
@@ -125,7 +168,10 @@ class GeminiClient(private val apiKey: String) {
             val code = conn.responseCode
             val stream = if (code in 200..299) conn.inputStream else conn.errorStream
             val text = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-            if (code !in 200..299) throw GeminiException(errorMessage(code, text), retryable = code == 429 || code >= 500)
+            if (code !in 200..299) throw GeminiException(
+                errorMessage(code, text), retryable = code == 429 || code >= 500,
+                code = code, suggestedModel = suggestedModel(text)
+            )
             return text
         } catch (e: IOException) {
             throw GeminiException("Bağlantı hatası: ${e.message ?: "internet bağlantını kontrol et"}", retryable = true)
@@ -135,6 +181,36 @@ class GeminiClient(private val apiKey: String) {
     }
 
     companion object {
+        /** "...Please update your code to use models/gemini-x-flash..." → "gemini-x-flash" */
+        fun suggestedModel(body: String): String? {
+            val msg = try {
+                JSONObject(body).optJSONObject("error")?.optString("message").orEmpty()
+            } catch (e: JSONException) {
+                body
+            }
+            return Regex("use (?:the )?(?:model )?models/([A-Za-z0-9._-]+)").find(msg)?.groupValues?.get(1)
+                ?.trimEnd('.', '-')?.takeIf { it.isNotEmpty() }
+        }
+
+        fun parseModels(json: String): List<ModelInfo> {
+            val arr = try {
+                JSONObject(json).optJSONArray("models")
+            } catch (e: JSONException) {
+                null
+            } ?: return emptyList()
+            val out = ArrayList<ModelInfo>()
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val name = o.optString("name").removePrefix("models/")
+                if (name.isEmpty()) continue
+                val m = o.optJSONArray("supportedGenerationMethods")
+                val methods = HashSet<String>()
+                if (m != null) for (k in 0 until m.length()) methods += m.optString(k)
+                out += ModelInfo(name, methods)
+            }
+            return out
+        }
+
         fun isImagen(model: String) = model.trim().lowercase().startsWith("imagen")
 
         private fun parseRoot(responseJson: String): JSONObject = try {

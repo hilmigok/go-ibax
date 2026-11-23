@@ -47,7 +47,7 @@
     <string name="api_key_hint">Gemini API anahtarı</string>
     <string name="text_model_hint">Senaryo modeli (metin)</string>
     <string name="image_model_hint">Görüntü modeli</string>
-    <string name="image_model_info">Örnekler: gemini-2.5-flash-image (varsayılan), gemini-3-pro-image-preview (daha kaliteli), imagen-4.0-generate-001, imagen-4.0-ultra-generate-001. Görüntü modelleri çoğunlukla AI Studio’da faturalandırma (ücretli plan) açık olmasını ister.</string>
+    <string name="image_model_info">Model emekliye ayrılırsa uygulama uygun olanı kendisi seçer. Örnekler: gemini-2.5-flash-image, gemini-3-pro-image-preview (daha kaliteli), imagen-4.0-generate-001, imagen-4.0-ultra-generate-001. Görüntü modelleri çoğunlukla AI Studio’da faturalandırma (ücretli plan) açık olmasını ister.</string>
     <string name="consistency">Karakter tutarlılığı (önceki kareyi referans gönder — yalnız Gemini görüntü modellerinde)</string>
     <string name="sound_settings">Ses</string>
     <string name="freesound_info">Gerçek ses kayıtları (rüzgâr, patlama, ağlama, kalabalık…) Freesound.org’dan, yalnızca telifsiz CC0 kayıtlar arasından seçilir. Ücretsiz anahtar: https://freesound.org/apiv2/apply
@@ -56,6 +56,7 @@ Anahtar girmezsen sesler cihazda sentezlenir.</string>
     <string name="tts_model_hint">Anlatıcı (seslendirme) modeli</string>
     <string name="voice_hint">Anlatıcı sesi</string>
     <string name="voice_info">Erkek: Charon (derin), Fenrir, Orus, Puck · Kadın: Kore, Aoede, Leda, Callirrhoe</string>
+    <string name="model_switched">“%1$s” artık kullanılamıyor; otomatik olarak “%2$s” seçildi.</string>
     <string name="save">Kaydet</string>
     <string name="saved">Kaydedildi</string>
 </resources>

@@ -12,8 +12,8 @@ android {
         // 29+: video ve fotoğrafları izin istemeden galeriye (MediaStore) kaydedebilmek için
         minSdk = 29
         targetSdk = 34
-        versionCode = 2
-        versionName = "2.0"
+        versionCode = 3
+        versionName = "2.1"
     }
 
     buildTypes {

@@ -160,14 +160,12 @@ class MainActivity : AppCompatActivity() {
             setBusy(true, getString(R.string.status_planning), indeterminate = true)
             try {
                 val client = GeminiClient(store.apiKey)
-                val newBoard = withContext(Dispatchers.IO) {
-                    retrying {
-                        val json = client.generateStoryboard(
-                            store.textModel,
-                            StoryboardPrompt.userMessage(text, count, portrait, captions, narration)
-                        )
-                        StoryboardParser.parse(json)
-                    }
+                val newBoard = withModel(ModelPicker.Kind.TEXT, store, client) { model ->
+                    val json = client.generateStoryboard(
+                        model,
+                        StoryboardPrompt.userMessage(text, count, portrait, captions, narration)
+                    )
+                    StoryboardParser.parse(json)
                 }
                 clearImages()
                 board = newBoard
@@ -253,7 +251,7 @@ class MainActivity : AppCompatActivity() {
             if (!narration || shot.narration.isEmpty() || voiceError.isNotEmpty()) { voices += null; continue }
             binding.status.text = getString(R.string.status_voice, i + 1, n)
             voices += try {
-                withContext(Dispatchers.IO) { retrying { client.generateSpeech(store.ttsModel, store.voice, shot.narration) } }
+                withModel(ModelPicker.Kind.TTS, store, client) { model -> client.generateSpeech(model, store.voice, shot.narration) }
             } catch (e: GeminiException) {
                 voiceError = e.message.orEmpty()   // bir kez başarısız olursa diğerlerini deneme
                 null
@@ -315,12 +313,45 @@ class MainActivity : AppCompatActivity() {
         } else null
         val refBytes = ref?.let { withContext(Dispatchers.Default) { ImageSaver.referenceJpeg(it) } }
         val prompt = StoryboardPrompt.imagePrompt(promptOverride ?: b.shots[i].prompt, s, portrait)
-        return withContext(Dispatchers.IO) {
-            retrying {
-                val bytes = client.generateImage(store.imageModel, prompt, portrait, refBytes)
-                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                    ?: throw GeminiException("Görüntü çözülemedi", retryable = true)
+        return withModel(ModelPicker.Kind.IMAGE, store, client) { model ->
+            // Imagen referans görüntü desteklemez.
+            val bytes = client.generateImage(model, prompt, portrait, refBytes.takeUnless { GeminiClient.isImagen(model) })
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                ?: throw GeminiException("Görüntü çözülemedi", retryable = true)
+        }
+    }
+
+    private var modelList: List<ModelInfo>? = null
+
+    /**
+     * Modeli çağırır; Google modeli emekliye ayırmışsa ya da bu anahtara kapalıysa,
+     * kullanılabilir modeller arasından uygun olanı seçer, Ayarlar'a kaydeder ve tekrar dener.
+     */
+    private suspend fun <T> withModel(
+        kind: ModelPicker.Kind, store: SecretStore, client: GeminiClient, block: suspend (String) -> T
+    ): T {
+        val current = when (kind) {
+            ModelPicker.Kind.TEXT -> store.textModel
+            ModelPicker.Kind.IMAGE -> store.imageModel
+            ModelPicker.Kind.TTS -> store.ttsModel
+        }
+        try {
+            return withContext(Dispatchers.IO) { retrying { block(current) } }
+        } catch (e: GeminiException) {
+            if (!e.modelUnavailable) throw e
+            val models = modelList ?: withContext(Dispatchers.IO) { client.listModels() }.also { modelList = it }
+            val replacement = ModelPicker.pick(kind, models.filter { it.name != current }, e.suggestedModel)
+                ?: throw GeminiException(
+                    "“$current” artık kullanılamıyor ve anahtarınla uygun başka bir model bulunamadı. " +
+                        "Ayarlar’dan model adını değiştir. (${e.message.orEmpty().take(120)})"
+                )
+            when (kind) {
+                ModelPicker.Kind.TEXT -> store.textModel = replacement
+                ModelPicker.Kind.IMAGE -> store.imageModel = replacement
+                ModelPicker.Kind.TTS -> store.ttsModel = replacement
             }
+            binding.status.text = getString(R.string.model_switched, current, replacement)
+            return withContext(Dispatchers.IO) { retrying { block(replacement) } }
         }
     }
 
