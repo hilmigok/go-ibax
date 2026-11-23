@@ -43,6 +43,7 @@ class VideoExporter(private val context: Context) {
         faces: List<List<FaceRig>> = emptyList(),
         mimics: Boolean = true,
         audio: ShortArray? = null,
+        clipFiles: List<File?> = emptyList(),
         onProgress: (Float) -> Unit
     ): Uri {
         val width = videoFormat.width
@@ -69,6 +70,7 @@ class VideoExporter(private val context: Context) {
         }
         var egl: EglWindow? = null
         var frameBitmap: Bitmap? = null
+        var clips: List<StreamingClip?> = emptyList()
         var success = false
 
         try {
@@ -79,11 +81,12 @@ class VideoExporter(private val context: Context) {
             frameBitmap = bmp
             val canvas = Canvas(bmp)
             val renderer = FrameRenderer().also { it.mimics = mimics }
+            clips = clipFiles.map { f -> f?.takeIf { it.exists() }?.let { runCatching { StreamingClip(it) }.getOrNull() } }
 
             val total = (timeline.total * FPS).roundToInt().coerceAtLeast(1)
             for (i in 0 until total) {
                 drain(encoder, muxer, state, endOfStream = false)
-                renderer.draw(canvas, board, images, timeline, i.toFloat() / FPS, width, height, captions, faces)
+                renderer.draw(canvas, board, images, timeline, i.toFloat() / FPS, width, height, captions, faces, clips)
                 GLES20.glViewport(0, 0, width, height)
                 blitter.draw(bmp)
                 egl.setPresentationTime(i * 1_000_000_000L / FPS)
@@ -94,6 +97,7 @@ class VideoExporter(private val context: Context) {
             blitter.release()
             success = true
         } finally {
+            clips.forEach { it?.release() }
             egl?.release()
             frameBitmap?.recycle()
             runCatching { encoder.stop() }

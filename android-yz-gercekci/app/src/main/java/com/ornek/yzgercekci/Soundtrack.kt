@@ -18,6 +18,13 @@ object Soundtrack {
     /** Anlatım, karenin başlangıcından bu kadar sonra başlar. */
     const val VOICE_DELAY = 0.45f
 
+    /** Anlatımdan diyalog cümlelerini çıkarır (Grok onları karakterlerin sesiyle söyledi). */
+    fun withoutDialogue(shot: Shot): String {
+        var t = shot.narration
+        for (l in shot.dialogue) t = t.replace(l.text, " ")
+        return t.replace(Regex("\\s+"), " ").trim().trim('.', ',', ' ').let { if (it.length < 3) "" else it }
+    }
+
     /** Anlatıcı sesinin sığması için karelerin süresini uzatır. */
     fun fitDurations(board: Storyboard, voiceSeconds: List<Float>): Storyboard =
         board.copy(shots = board.shots.mapIndexed { i, s ->

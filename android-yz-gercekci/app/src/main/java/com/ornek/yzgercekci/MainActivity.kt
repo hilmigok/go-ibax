@@ -42,6 +42,15 @@ class MainActivity : AppCompatActivity() {
     private var job: Job? = null
     private var seedBase = 0
     private var pickIndex = -1
+    private val clipFiles = ArrayList<java.io.File?>()
+    private val previewClips = ArrayList<ClipFrames?>()
+    private var characters: List<CharacterRef> = emptyList()
+    private var userSeeking = false
+
+    /** Karakter referans resmi seçmek için. */
+    private val pickCharacter = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) addCharacter(uri)
+    }
 
     /** Bir kareye galeriden görsel seçmek için. */
     private val pickImage = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -100,18 +109,76 @@ class MainActivity : AppCompatActivity() {
         binding.btnSavePhotos.setOnClickListener { savePhotos() }
         binding.btnCancel.setOnClickListener { job?.cancel() }
 
+        val store = SecretStore(this)
+        binding.grok.isChecked = store.grokEnabled && store.xaiKey.isNotBlank()
+        binding.grok.setOnCheckedChangeListener { sw, checked ->
+            val st = SecretStore(this)
+            if (checked && st.xaiKey.isBlank()) {
+                sw.isChecked = false
+                Toast.makeText(this, R.string.grok_need_key, Toast.LENGTH_LONG).show()
+                startActivity(Intent(this, SettingsActivity::class.java))
+                return@setOnCheckedChangeListener
+            }
+            st.grokEnabled = checked
+        }
+
+        // Oynatma: dokun / ⏯ ile durdur-başlat, çubukla sar.
+        binding.btnPlay.setOnClickListener { togglePlay() }
+        binding.preview.setOnClickListener { if (board != null) togglePlay() }
+        binding.preview.onTime = { t, total ->
+            if (!userSeeking && total > 0f) binding.seek.progress = (t / total * 1000).toInt()
+            binding.timeText.text = "${fmt(t)} / ${fmt(total)}"
+        }
+        binding.seek.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: android.widget.SeekBar, progress: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    val t = progress / 1000f * binding.preview.total
+                    binding.preview.seekTo(t)
+                    binding.timeText.text = "${fmt(t)} / ${fmt(binding.preview.total)}"
+                }
+            }
+            override fun onStartTrackingTouch(sb: android.widget.SeekBar) {
+                userSeeking = true
+                player.stop()
+            }
+            override fun onStopTrackingTouch(sb: android.widget.SeekBar) {
+                userSeeking = false
+                if (!binding.preview.paused) startAudioAt(binding.preview.currentTime())
+            }
+        })
+
+        refreshCharacters()
         binding.root.post { applyPreviewSize() }
-        binding.preview.setContent(null, emptyList(), emptyList())
+        binding.preview.setContent(null, emptyList(), emptyList(), emptyList())
         updateButtons()
     }
 
-    override fun onResume() {
-        super.onResume()
-        restartPlayback()
+    private fun fmt(t: Float): String {
+        val s = t.toInt().coerceAtLeast(0)
+        return "${s / 60}:${(s % 60).toString().padStart(2, '0')}"
+    }
+
+    private fun togglePlay() {
+        if (binding.preview.paused) {
+            binding.preview.play()
+            startAudioAt(binding.preview.currentTime())
+            binding.btnPlay.setText(R.string.pause_symbol)
+        } else {
+            binding.preview.pause()
+            player.stop()
+            binding.btnPlay.setText(R.string.play_symbol)
+        }
+    }
+
+    private fun startAudioAt(t: Float) {
+        player.stop()
+        val pcm = soundtrack ?: return
+        if (binding.sounds.isChecked && board != null) player.play(pcm, (t * Soundtrack.SR).toInt())
     }
 
     override fun onPause() {
-        player.stop()
+        // Arka plana geçince önizleme ve ses durur; geri gelince ▶ ile sürer.
+        if (!binding.preview.paused) togglePlay()
         super.onPause()
     }
 
@@ -123,13 +190,17 @@ class MainActivity : AppCompatActivity() {
     /** Önizlemeyi ve sesi birlikte baştan başlatır. */
     private fun restartPlayback() {
         player.stop()
-        val pcm = soundtrack
-        if (binding.sounds.isChecked && pcm != null && board != null) player.play(pcm)
         binding.preview.restart()
+        if (binding.preview.paused) {
+            binding.preview.play()
+            binding.btnPlay.setText(R.string.pause_symbol)
+        }
+        startAudioAt(0f)
     }
 
     private fun showContent() {
-        binding.preview.setContent(board, images, faces.toList())
+        binding.preview.setContent(board, images, faces.toList(), previewClips.toList())
+        binding.playbackBar.visibility = if (board != null) View.VISIBLE else View.GONE
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -166,30 +237,63 @@ class MainActivity : AppCompatActivity() {
             binding.prompt.error = getString(R.string.empty_prompt)
             return
         }
+        hideKeyboard()
+        var parsed = try {
+            ScriptParser.parse(text)
+        } catch (e: StoryboardException) {
+            binding.status.text = getString(R.string.error_prefix, e.message.orEmpty())
+            return
+        }
+        if (binding.captions.isChecked) {
+            // Ekran yazısı yoksa anlatımı altyazı olarak göster (TikTok tarzı).
+            parsed = parsed.copy(shots = parsed.shots.map {
+                if (it.caption.isEmpty() && it.narration.isNotEmpty()) it.copy(caption = it.narration.take(110)) else it
+            })
+        }
+        val useGrok = grokReady()
+        if (useGrok) {
+            confirmGrok(parsed.shots.size) { startPipeline(parsed, grok = true) }
+        } else {
+            startPipeline(parsed, grok = false)
+        }
+    }
+
+    /** Grok düğmesi açık ve anahtar girilmiş mi? */
+    private fun grokReady(): Boolean = binding.grok.isChecked && SecretStore(this).xaiKey.isNotBlank()
+
+    /** Üretmeden önce süre ve tahmini ücret onayı. */
+    private fun confirmGrok(shots: Int, onYes: () -> Unit) {
+        val secs = SecretStore(this).clipSeconds
+        val total = shots * secs
+        val low = String.format(java.util.Locale.US, "%.2f", total * 0.05)
+        val high = String.format(java.util.Locale.US, "%.2f", total * 0.14)
+        AlertDialog.Builder(this)
+            .setTitle(R.string.grok_confirm_title)
+            .setMessage(getString(R.string.grok_confirm, shots, secs, total, "$$low – $$high"))
+            .setPositiveButton(R.string.grok_go) { _, _ -> onYes() }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun startPipeline(newBoardIn: Storyboard, grok: Boolean) {
         val store = SecretStore(this)
         val portrait = format.isPortrait
-        val captions = binding.captions.isChecked
         val narration = binding.narration.isChecked && binding.sounds.isChecked
         val autoImages = binding.autoImages.isChecked
         val chosenStyle = style
-        hideKeyboard()
 
         job = lifecycleScope.launch {
             setBusy(true, getString(R.string.status_planning), indeterminate = true)
             try {
-                var newBoard = withContext(Dispatchers.Default) { ScriptParser.parse(text) }
-                if (captions) {
-                    // Ekran yazısı yoksa anlatımı altyazı olarak göster (TikTok tarzı).
-                    newBoard = newBoard.copy(shots = newBoard.shots.map {
-                        if (it.caption.isEmpty() && it.narration.isNotEmpty()) it.copy(caption = it.narration.take(110)) else it
-                    })
-                }
+                val newBoard = newBoardIn
                 seedBase = (System.currentTimeMillis() % 100_000).toInt()
                 clearImages()
                 board = newBoard
                 boardPortrait = portrait
                 images.addAll(List(newBoard.shots.size) { null })
                 faces.addAll(List(newBoard.shots.size) { emptyList() })
+                clipFiles.addAll(List(newBoard.shots.size) { null })
+                previewClips.addAll(List(newBoard.shots.size) { null })
                 rebuildThumbs()
                 showContent()
 
@@ -214,7 +318,15 @@ class MainActivity : AppCompatActivity() {
                 setBusy(true, getString(R.string.status_faces), indeterminate = true)
                 detectFaces()
 
-                // Sesler: gerçek kayıtlar / sentez, fon müziği, anlatıcı.
+                // Grok: kareleri gerçek videoya çevir.
+                var clipCount = 0
+                if (grok) {
+                    val r = makeClips(store, newBoard.shots.indices.toList(), portrait, chosenStyle)
+                    clipCount = r.first
+                    if (r.second.isNotEmpty()) { failures++; lastError = r.second }
+                }
+
+                // Sesler: klip sesi / gerçek kayıtlar / sentez, fon müziği, anlatıcı.
                 var soundNote = ""
                 if (binding.sounds.isChecked) {
                     val (fitted, pcm, note) = buildSound(store, board ?: newBoard, narration)
@@ -223,17 +335,16 @@ class MainActivity : AppCompatActivity() {
                     soundNote = note
                     showContent()
                 }
-                restartPlayback()
                 setBusy(false)
+                restartPlayback()
                 val b = board ?: newBoard
-                binding.status.text = if (!autoImages) {
-                    getString(R.string.status_need_images)
-                } else if (failures == 0) {
-                    if (soundNote.isNotEmpty() || faces.any { it.isNotEmpty() }) {
+                binding.status.text = when {
+                    failures > 0 -> getString(R.string.status_partial, failures, lastError)
+                    clipCount > 0 -> getString(R.string.status_ready_grok, b.title, clipCount, soundNote)
+                    !autoImages -> getString(R.string.status_need_images)
+                    soundNote.isNotEmpty() || faces.any { it.isNotEmpty() } ->
                         getString(R.string.status_ready_sound, b.title, faces.sumOf { it.size }, soundNote)
-                    } else getString(R.string.status_ready, b.title)
-                } else {
-                    getString(R.string.status_partial, failures, lastError)
+                    else -> getString(R.string.status_ready, b.title)
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 setBusy(false, getString(R.string.status_cancelled))
@@ -242,6 +353,71 @@ class MainActivity : AppCompatActivity() {
                 binding.status.text = getString(R.string.error_prefix, e.message ?: e.javaClass.simpleName)
             }
         }
+    }
+
+    /**
+     * Verilen sahneleri Grok ile gerçek videoya çevirir (sırayla). Sahnenin görseli varsa ilk kare,
+     * adı geçen karakterlerin resimleri referans olarak gönderilir.
+     * @return (üretilen klip sayısı, son hata mesajı ya da "")
+     */
+    private suspend fun makeClips(store: SecretStore, indices: List<Int>, portrait: Boolean, s: VisualStyle): Pair<Int, String> {
+        val client = XaiVideoClient(store.xaiKey)
+        val dir = java.io.File(filesDir, "clips").apply { mkdirs() }
+        var made = 0
+        var lastError = ""
+        for ((k, i) in indices.withIndex()) {
+            val b = board ?: break
+            val shot = b.shots[i]
+            val refs = CharacterMatcher.match(shot, characters)
+            setBusy(true, getString(R.string.status_grok, k + 1, indices.size, "…"), indeterminate = true)
+            try {
+                val image = images.getOrNull(i)
+                val req = withContext(Dispatchers.Default) {
+                    XaiVideoClient.Request(
+                        model = store.xaiModel,
+                        prompt = StoryboardPrompt.grokPrompt(shot, s, portrait, refs.map { it.name }),
+                        portrait = portrait,
+                        durationSeconds = store.clipSeconds,
+                        resolution = store.xaiResolution,
+                        image = image?.let { ImageSaver.referenceJpeg(it) },
+                        references = refs.mapNotNull { r -> runCatching { java.io.File(r.imagePath).readBytes() }.getOrNull() }
+                    )
+                }
+                val id = withContext(Dispatchers.IO) { retrying { client.start(req) } }
+                var url: String? = null
+                var waited = 0
+                while (url == null) {
+                    delay(8_000)
+                    waited += 8
+                    if (waited > 900) throw ServiceException("Grok 15 dakikada videoyu bitirmedi. Tekrar dene.")
+                    binding.status.text = getString(R.string.status_grok, k + 1, indices.size, getString(R.string.status_grok_wait, waited))
+                    val st = withContext(Dispatchers.IO) { retrying { client.poll(id) } }
+                    if (st is XaiVideoClient.Status.Done) url = st.url
+                }
+                val videoUrl: String = url ?: throw ServiceException("Grok video adresi gelmedi")
+                val file = java.io.File(dir, "clip_${System.currentTimeMillis()}_$i.mp4")
+                withContext(Dispatchers.IO) { retrying { client.download(videoUrl, file) } }
+                binding.status.text = getString(R.string.status_clip_preview)
+                val (dur, preview) = withContext(Dispatchers.Default) { VideoClips.duration(file) to PreviewClip.load(file) }
+                previewClips.getOrNull(i)?.let { old -> binding.preview.post { old.release() } }
+                clipFiles.getOrNull(i)?.delete()
+                while (clipFiles.size <= i) { clipFiles.add(null); previewClips.add(null) }
+                clipFiles[i] = file
+                previewClips[i] = preview
+                // Sahne süresi klip süresine eşitlenir.
+                board = b.copy(shots = b.shots.toMutableList().also { it[i] = it[i].copy(duration = dur.coerceAtLeast(1f)) })
+                made++
+                rebuildThumbs()
+                showContent()
+            } catch (e: ServiceException) {
+                lastError = e.message.orEmpty()
+                // Anahtar/kredi sorununda diğer sahneleri denemenin anlamı yok.
+                if (lastError.contains("(401") || lastError.contains("(402") || lastError.contains("(403") ||
+                    lastError.contains("kredi")
+                ) break
+            }
+        }
+        return made to lastError
     }
 
     private suspend fun detectFaces(only: Int? = null) {
@@ -269,10 +445,12 @@ class MainActivity : AppCompatActivity() {
         try {
             if (narrator != null) voiceError = narrator.open().orEmpty()
             for ((i, shot) in b.shots.withIndex()) {
-                if (narrator == null || shot.narration.isEmpty() || voiceError.isNotEmpty()) { voices += null; continue }
+                // Grok klibi olan sahnede diyaloğu karakterler zaten kendi sesiyle söyledi; anlatıcı yalnızca geri kalanı okur.
+                val text = if (clipFiles.getOrNull(i) != null) Soundtrack.withoutDialogue(shot) else shot.narration
+                if (narrator == null || text.isEmpty() || voiceError.isNotEmpty()) { voices += null; continue }
                 binding.status.text = getString(R.string.status_voice, i + 1, n)
                 voices += try {
-                    narrator.speak(shot.narration, cacheDir)
+                    narrator.speak(text, cacheDir)
                 } catch (e: Exception) {
                     voiceError = e.message ?: "anlatım üretilemedi"   // bir kez başarısız olursa diğerlerini deneme
                     null
@@ -293,7 +471,11 @@ class MainActivity : AppCompatActivity() {
         for ((i, shot) in fitted.shots.withIndex()) {
             binding.status.text = getString(R.string.status_sound, i + 1, n)
             var clip: FloatArray? = null
-            if (shot.sound.isNotEmpty()) {
+            // Grok klibinin kendi sesi (ortam, efekt, konuşma) o sahnenin sesi olur.
+            clipFiles.getOrNull(i)?.let { f ->
+                clip = withContext(Dispatchers.IO) { runCatching { AudioDecoder.decode(f, 20f) }.getOrNull() }
+            }
+            if (clip == null && shot.sound.isNotEmpty()) {
                 // Önce Freesound (anahtar varsa), sonra anahtarsız Openverse; ikisi de yoksa sentez.
                 clip = cache.getOrPut(shot.sound.lowercase()) {
                     withContext(Dispatchers.IO) {
@@ -391,20 +573,23 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** Galeriden seçilen görseli kareye koyar (yazılımsal bitmap; video çizimi için gerekli). */
+    /** Galeriden seçilen görseli yazılımsal bitmap olarak açar (video çizimi için gerekli). */
+    private suspend fun decodeUri(uri: Uri, maxSide: Int = 2048): Bitmap = withContext(Dispatchers.IO) {
+        val src = ImageDecoder.createSource(contentResolver, uri)
+        ImageDecoder.decodeBitmap(src) { decoder, info, _ ->
+            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            val max = maxOf(info.size.width, info.size.height)
+            if (max > maxSide) {
+                val k = maxSide.toFloat() / max
+                decoder.setTargetSize((info.size.width * k).toInt(), (info.size.height * k).toInt())
+            }
+        }
+    }
+
     private fun useGalleryImage(i: Int, uri: Uri) {
         lifecycleScope.launch {
             try {
-                val bmp = withContext(Dispatchers.IO) {
-                    val src = ImageDecoder.createSource(contentResolver, uri)
-                    ImageDecoder.decodeBitmap(src) { decoder, info, _ ->
-                        decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-                        val max = maxOf(info.size.width, info.size.height)
-                        if (max > 2048) {
-                            val k = 2048f / max
-                            decoder.setTargetSize((info.size.width * k).toInt(), (info.size.height * k).toInt())
-                        }
-                    }
-                }
+                val bmp = decodeUri(uri)
                 if (i >= images.size) return@launch
                 images[i]?.let { old -> binding.preview.post { old.recycle() } }
                 images[i] = bmp
@@ -418,10 +603,118 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ---------------------------------------------------------------- karakterler
+
+    private fun refreshCharacters() {
+        characters = CharacterStore(this).load()
+        val strip = binding.characters
+        strip.removeAllViews()
+        val d = resources.displayMetrics.density
+        val size = (64 * d).toInt()
+        for (c in characters) {
+            val item = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = android.view.Gravity.CENTER_HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                    .apply { marginEnd = (8 * d).toInt() }
+                setOnClickListener { onCharacterClicked(c) }
+            }
+            item.addView(ImageView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(size, size)
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                contentDescription = c.name
+                setImageBitmap(BitmapFactory.decodeFile(c.imagePath, BitmapFactory.Options().apply { inSampleSize = 4 }))
+            })
+            item.addView(android.widget.TextView(this).apply {
+                text = c.name
+                textSize = 12f
+                maxLines = 1
+            })
+            strip.addView(item)
+        }
+        strip.addView(com.google.android.material.button.MaterialButton(
+            this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle
+        ).apply {
+            setText(R.string.add_character)
+            setOnClickListener { pickCharacter.launch("image/*") }
+        })
+    }
+
+    private fun askName(initial: String, onName: (String) -> Unit) {
+        val input = EditText(this).apply {
+            setText(initial)
+            hint = getString(R.string.character_name_hint)
+            isSingleLine = true
+        }
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        val box = LinearLayout(this).apply {
+            setPadding(pad, pad / 2, pad, 0)
+            addView(input, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.character_name_title)
+            .setView(box)
+            .setPositiveButton(R.string.save) { _, _ ->
+                val name = input.text.toString().trim()
+                if (name.isNotEmpty()) onName(name)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun addCharacter(uri: Uri) {
+        lifecycleScope.launch {
+            val bmp = try {
+                decodeUri(uri, 1600)
+            } catch (e: Exception) {
+                binding.status.text = getString(R.string.error_prefix, getString(R.string.image_load_failed))
+                return@launch
+            }
+            askName("") { name ->
+                lifecycleScope.launch {
+                    withContext(Dispatchers.IO) { CharacterStore(this@MainActivity).add(name, bmp) }
+                    bmp.recycle()
+                    refreshCharacters()
+                }
+            }
+        }
+    }
+
+    private fun onCharacterClicked(c: CharacterRef) {
+        AlertDialog.Builder(this)
+            .setTitle(c.name)
+            .setItems(arrayOf(getString(R.string.rename), getString(R.string.delete))) { _, which ->
+                if (which == 0) {
+                    askName(c.name) { name -> CharacterStore(this).rename(c.id, name); refreshCharacters() }
+                } else {
+                    CharacterStore(this).remove(c.id)
+                    refreshCharacters()
+                }
+            }
+            .show()
+    }
+
     /** Küçük resme dokununca: tarifi düzenleyip o kareyi yeniden üret ya da fotoğrafı kaydet. */
     private fun onThumbClicked(i: Int) {
+        if (board == null || job?.isActive == true) return
+        val actions = ArrayList<Pair<String, () -> Unit>>()
+        actions += getString(R.string.regenerate) to { editAndRegenerate(i) }
+        actions += getString(R.string.pick_gallery) to {
+            pickIndex = i
+            pickImage.launch("image/*")
+        }
+        if (SecretStore(this).xaiKey.isNotBlank()) actions += getString(R.string.grok_shot) to {
+            confirmGrok(1) { grokSingle(i) }
+        }
+        if (images.getOrNull(i) != null) actions += getString(R.string.save_photo) to { savePhoto(i) }
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.shot_title, i + 1))
+            .setItems(actions.map { it.first }.toTypedArray()) { _, which -> actions[which].second() }
+            .show()
+    }
+
+    private fun editAndRegenerate(i: Int) {
         val b = board ?: return
-        if (job?.isActive == true) return
         val input = EditText(this).apply {
             setText(b.shots[i].prompt)
             minLines = 4
@@ -432,19 +725,43 @@ class MainActivity : AppCompatActivity() {
             setPadding(pad, pad / 2, pad, 0)
             addView(input, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
-        val dialog = AlertDialog.Builder(this)
+        AlertDialog.Builder(this)
             .setTitle(getString(R.string.shot_title, i + 1))
             .setMessage(R.string.shot_dialog_info)
             .setView(box)
             .setPositiveButton(R.string.regenerate) { _, _ -> regenerate(i, input.text.toString().trim()) }
-        dialog.setNegativeButton(R.string.pick_gallery) { _, _ ->
-            pickIndex = i
-            pickImage.launch("image/*")
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    /** Tek bir sahneyi Grok ile videoya çevirir, sonra sesi yeniden karıştırır. */
+    private fun grokSingle(i: Int) {
+        val store = SecretStore(this)
+        val portrait = boardPortrait
+        val chosenStyle = style
+        val narration = binding.narration.isChecked && binding.sounds.isChecked
+        job = lifecycleScope.launch {
+            try {
+                val (made, err) = makeClips(store, listOf(i), portrait, chosenStyle)
+                if (made > 0 && binding.sounds.isChecked) {
+                    board?.let { b ->
+                        val (fitted, pcm, _) = buildSound(store, b, narration)
+                        board = fitted
+                        soundtrack = pcm
+                    }
+                }
+                setBusy(false)
+                showContent()
+                restartPlayback()
+                binding.status.text = if (made > 0) getString(R.string.status_ready_grok, board?.title.orEmpty(), made, "")
+                else getString(R.string.error_prefix, err)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                setBusy(false, getString(R.string.status_cancelled))
+            } catch (e: Exception) {
+                setBusy(false)
+                binding.status.text = getString(R.string.error_prefix, e.message ?: e.javaClass.simpleName)
+            }
         }
-        if (images.getOrNull(i) != null) {
-            dialog.setNeutralButton(R.string.save_photo) { _, _ -> savePhoto(i) }
-        }
-        dialog.show()
     }
 
     private fun regenerate(i: Int, newPrompt: String) {
@@ -479,11 +796,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun exportVideo() {
         val b = board ?: return
-        if (images.none { it != null }) return
+        if (images.none { it != null } && clipFiles.none { it != null }) return
         val targetFormat = format
         val captions = binding.captions.isChecked
         val snapshot = images.toList()
         val faceSnapshot = faces.toList()
+        val clipSnapshot = clipFiles.toList()
         val mimics = binding.mimics.isChecked
         val audio = soundtrack.takeIf { binding.sounds.isChecked }
         job = lifecycleScope.launch {
@@ -493,7 +811,7 @@ class MainActivity : AppCompatActivity() {
             player.stop()
             try {
                 val uri = withContext(Dispatchers.Default) {
-                    VideoExporter(applicationContext).export(b, snapshot, targetFormat, captions, faceSnapshot, mimics, audio) { p ->
+                    VideoExporter(applicationContext).export(b, snapshot, targetFormat, captions, faceSnapshot, mimics, audio, clipSnapshot) { p ->
                         val pct = (p * 100).toInt()
                         binding.root.post {
                             binding.progress.setProgressCompat(pct, true)
@@ -558,6 +876,11 @@ class MainActivity : AppCompatActivity() {
         soundtrack = null
         mixParts = null
         faces.clear()
+        val oldClips = previewClips.toList()
+        previewClips.clear()
+        binding.preview.post { oldClips.forEach { it?.release() } }
+        clipFiles.forEach { it?.delete() }
+        clipFiles.clear()
         val old = images.toList()
         images.clear()
         // Önizleme eski bitmap'leri çizmeyi bıraktıktan sonra serbest bırak.
@@ -573,14 +896,24 @@ class MainActivity : AppCompatActivity() {
         val w = if (boardPortrait) (h * 9 / 16) else (h * 16 / 9)
         for (i in b.shots.indices) {
             val iv = ImageView(this).apply {
-                layoutParams = LinearLayout.LayoutParams(w, h).apply { marginEnd = (6 * d).toInt() }
                 scaleType = ImageView.ScaleType.CENTER_CROP
                 setBackgroundColor(0xFF22232A.toInt())
                 contentDescription = getString(R.string.shot_title, i + 1)
                 images.getOrNull(i)?.let { setImageBitmap(it) } ?: setImageResource(android.R.drawable.ic_menu_gallery)
-                setOnClickListener { onThumbClicked(i) }
             }
-            strip.addView(iv)
+            val cell = android.widget.FrameLayout(this).apply {
+                layoutParams = LinearLayout.LayoutParams(w, h).apply { marginEnd = (6 * d).toInt() }
+                setOnClickListener { onThumbClicked(i) }
+                addView(iv, android.widget.FrameLayout.LayoutParams(w, h))
+                if (clipFiles.getOrNull(i) != null) {
+                    // Gerçek video klibi olan kare: köşede 🎬 işareti.
+                    addView(android.widget.TextView(this@MainActivity).apply {
+                        text = "🎬"
+                        textSize = 14f
+                    }, android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                }
+            }
+            strip.addView(cell)
         }
         binding.thumbsHint.visibility = View.VISIBLE
     }
@@ -603,8 +936,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateButtons(busy: Boolean = job?.isActive == true) {
         val hasImages = images.any { it != null }
+        val hasMedia = hasImages || clipFiles.any { it != null }
         binding.btnGenerate.isEnabled = !busy
-        binding.btnExport.isEnabled = !busy && board != null && hasImages
+        binding.btnExport.isEnabled = !busy && board != null && hasMedia
         binding.btnSavePhotos.isEnabled = !busy && hasImages
         binding.btnCancel.visibility = if (busy) View.VISIBLE else View.GONE
         for (i in 0 until binding.formatGroup.childCount) binding.formatGroup.getChildAt(i).isEnabled = !busy

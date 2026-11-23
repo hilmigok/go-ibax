@@ -60,6 +60,10 @@ class FrameRenderer {
         var expression: Expression? = null
     }
 
+    private var clips: List<ClipFrames?> = emptyList()
+    private var timeline: Timeline? = null
+    private val clipPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+
     /** Mimikler açık mı (yüz bulunamayan karelerde zaten bir şey yapılmaz). */
     var mimics = true
 
@@ -77,10 +81,12 @@ class FrameRenderer {
      */
     fun draw(
         canvas: Canvas, board: Storyboard, images: List<Bitmap?>, timeline: Timeline, t: Float, w: Int, h: Int,
-        captions: Boolean, faces: List<List<FaceRig>> = emptyList()
+        captions: Boolean, faces: List<List<FaceRig>> = emptyList(), clips: List<ClipFrames?> = emptyList()
     ) {
         canvas.drawColor(Color.BLACK)
         val f = timeline.at(t)
+        this.clips = clips
+        this.timeline = timeline
         drawShot(canvas, board, images, faces, f.index, f.progress, 1f, t, w, h)
         if (f.next != null) {
             // Geçişte kare bir katmana tam opak çizilip katman bütün olarak saydamlaştırılır;
@@ -104,8 +110,19 @@ class FrameRenderer {
         i: Int, progress: Float, alpha: Float, t: Float, w: Int, h: Int
     ) {
         val shot = board.shots[i]
-        val bmp = images.getOrNull(i)
         val a = (alpha * 255).toInt().coerceIn(0, 255)
+        // Gerçek video klibi varsa: klibin o anki karesi; kamera hareketi, mimik ve efekt eklenmez.
+        val clip = clips.getOrNull(i)
+        val frame = if (clip != null) clip.frameAt(progress * (timeline?.durations?.getOrNull(i) ?: clip.duration)) else null
+        if (frame != null && !frame.isRecycled) {
+            val p = KenBurns.placement(KenBurns(1f, 0f, 0f), frame.width, frame.height, w, h)
+            matrix.setScale(p[2], p[2])
+            matrix.postTranslate(p[0], p[1])
+            clipPaint.alpha = a
+            canvas.drawBitmap(frame, matrix, clipPaint)
+            return
+        }
+        val bmp = images.getOrNull(i)
         if (bmp != null && !bmp.isRecycled) {
             val kb = KenBurns.at(shot.camera, progress)
             val p = KenBurns.placement(kb, bmp.width, bmp.height, w, h)

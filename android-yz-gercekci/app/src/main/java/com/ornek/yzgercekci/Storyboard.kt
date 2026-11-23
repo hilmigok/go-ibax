@@ -91,13 +91,22 @@ data class Shot(
     val sound: String = "",
     val ambience: Ambience = Ambience.WIND,
     /** Anlatıcının bu karede okuyacağı Türkçe cümle (boş olabilir). */
-    val narration: String = ""
+    val narration: String = "",
+    /** Video modeli için hareketin İngilizce tarifi. */
+    val motion: String = "",
+    /** Karakterlerin bu sahnede söylediği sözler (Grok modunda karakterler kendi sesiyle söyler). */
+    val dialogue: List<Line> = emptyList()
 )
+
+/** Bir diyalog satırı. */
+data class Line(val character: String, val text: String)
 
 data class Storyboard(
     val title: String,
     val shots: List<Shot>,
-    val music: Music = Music.SAD
+    val music: Music = Music.SAD,
+    /** Senaryoda geçen karakter adları. */
+    val characters: List<String> = emptyList()
 )
 
 /** Kullanıcının seçebileceği görsel üslup; [suffix] her görüntü tarifinin sonuna eklenir. */

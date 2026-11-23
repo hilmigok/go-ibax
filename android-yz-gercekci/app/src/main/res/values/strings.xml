@@ -63,4 +63,30 @@ Anahtar girmezsen sesler anahtarsız Openverse’ten (CC0 / kamu malı) aranır;
     <string name="tts_info">Anlatıcı, telefonun metin okuma motorunu kullanır. Ses doğal gelmiyorsa “Google Konuşma Hizmetleri”ni seçip Türkçe ses paketini indir.</string>
     <string name="tts_settings">Metin okuma ayarlarını aç</string>
     <string name="tts_settings_missing">Metin okuma ayarları bu cihazda açılamadı. Ayarlar › Erişilebilirlik › Metin okuma çıkışı’na bak.</string>
+    <string name="pause_symbol">⏸</string>
+    <string name="play_symbol">▶</string>
+    <string name="characters_title">Karakterler (referans resimler)</string>
+    <string name="characters_info">Her karaktere bir ad ve resim ver; adı geçen sahnelerde Grok o yüzü kullanır. (Ücretsiz fotoğraf modunda referans kullanılamaz.)</string>
+    <string name="add_character">+ Karakter ekle</string>
+    <string name="character_name_title">Karakterin adı</string>
+    <string name="character_name_hint">Senaryodaki adı (ör. KOVAN)</string>
+    <string name="character_options">%1$s</string>
+    <string name="rename">Adını değiştir</string>
+    <string name="delete">Sil</string>
+    <string name="grok_switch">Grok ile gerçek video (ücretli, xAI anahtarı) — istediğin zaman aç / kapat</string>
+    <string name="grok_need_key">Grok için önce Ayarlar’dan xAI anahtarını gir.</string>
+    <string name="grok_confirm_title">Grok ile video üretilsin mi?</string>
+    <string name="grok_confirm">%1$d sahne × %2$d sn = %3$d sn video. xAI saniye başına ücretlendirir (modele ve çözünürlüğe göre yaklaşık %4$s). Devam edilsin mi?</string>
+    <string name="grok_go">Üret</string>
+    <string name="status_grok">Grok video üretiyor: %1$d / %2$d · %3$s</string>
+    <string name="status_grok_wait">bekleniyor %1$d sn</string>
+    <string name="status_clip_preview">Klip önizlemeye hazırlanıyor…</string>
+    <string name="status_ready_grok">Hazır: %1$s · %2$d gerçek video klibi · %3$s</string>
+    <string name="grok_shot">Grok ile videoya çevir</string>
+    <string name="grok_settings">Grok (xAI) — gerçek video, ücretli</string>
+    <string name="grok_info">Kareler hareketsiz fotoğraf yerine gerçek videoya dönüşür; karakterler hareket eder, konuşur, ses de üretilir. xAI API anahtarı: https://console.x.ai (ücretli, saniye başına).</string>
+    <string name="xai_key_hint">xAI API anahtarı</string>
+    <string name="xai_model_hint">Grok video modeli</string>
+    <string name="xai_res_hint">Çözünürlük (480p / 720p)</string>
+    <string name="clip_seconds_hint">Sahne başına klip süresi (1–15 sn)</string>
 </resources>

@@ -35,11 +35,32 @@ object StoryboardParser {
                 expression = Expression.from(o.optString("expression")),
                 sound = o.optString("sound").trim().take(60),
                 ambience = Ambience.from(o.optString("ambience")),
-                narration = o.optString("narration").trim().take(220)
+                narration = o.optString("narration").trim().take(300),
+                motion = o.optString("motion").trim().take(600),
+                dialogue = parseDialogue(o.optJSONArray("dialogue"))
             )
         }
         if (shots.isEmpty()) throw StoryboardException("Senaryoda geçerli sahne yok. Tekrar dene.")
         val title = root.optString("title").trim().take(48).ifEmpty { "Sahne" }
-        return Storyboard(title, shots, Music.from(root.optString("music")))
+        val chars = ArrayList<String>()
+        root.optJSONArray("characters")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val c = arr.optJSONObject(i)?.optString("name") ?: arr.optString(i)
+                if (!c.isNullOrBlank()) chars += c.trim().take(40)
+            }
+        }
+        return Storyboard(title, shots, Music.from(root.optString("music")), chars)
+    }
+
+    private fun parseDialogue(arr: org.json.JSONArray?): List<Line> {
+        if (arr == null) return emptyList()
+        val out = ArrayList<Line>()
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val text = o.optString("line").ifEmpty { o.optString("text") }.trim()
+            if (text.isEmpty()) continue
+            out += Line(o.optString("character").trim().take(40), text.take(300))
+        }
+        return out
     }
 }

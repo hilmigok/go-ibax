@@ -35,14 +35,19 @@ object ImageSaver {
         return uri
     }
 
-    /** Tutarlılık referansı olarak gönderilecek küçük JPEG (yükleme boyutunu düşük tutar). */
-    fun referenceJpeg(bmp: Bitmap, maxSide: Int = 768): ByteArray {
+    /** En uzun kenarı [maxSide]'ı aşmayacak şekilde küçültür (gerekmiyorsa aynısını döndürür). */
+    fun scaleDown(bmp: Bitmap, maxSide: Int): Bitmap {
         val scale = minOf(1f, maxSide.toFloat() / maxOf(bmp.width, bmp.height))
-        val small = if (scale < 1f) {
-            Bitmap.createScaledBitmap(bmp, (bmp.width * scale).toInt(), (bmp.height * scale).toInt(), true)
+        return if (scale < 1f) {
+            Bitmap.createScaledBitmap(bmp, (bmp.width * scale).toInt().coerceAtLeast(1), (bmp.height * scale).toInt().coerceAtLeast(1), true)
         } else bmp
+    }
+
+    /** Video modeline gönderilecek JPEG (yükleme boyutunu düşük tutar). */
+    fun referenceJpeg(bmp: Bitmap, maxSide: Int = 1024): ByteArray {
+        val small = scaleDown(bmp, maxSide)
         val out = ByteArrayOutputStream()
-        small.compress(Bitmap.CompressFormat.JPEG, 85, out)
+        small.compress(Bitmap.CompressFormat.JPEG, 88, out)
         if (small !== bmp) small.recycle()
         return out.toByteArray()
     }

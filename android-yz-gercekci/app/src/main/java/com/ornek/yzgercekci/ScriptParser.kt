@@ -39,6 +39,7 @@ object ScriptParser {
     private class Block {
         val desc = StringBuilder()
         val narration = StringBuilder()
+        val dialogue = ArrayList<Line>()
         var caption = ""
         var sound = ""
         fun isEmpty() = desc.isBlank() && narration.isBlank() && caption.isBlank()
@@ -46,6 +47,7 @@ object ScriptParser {
 
     private fun parsePlain(text: String): Storyboard {
         var title = ""
+        val characters = ArrayList<String>()
         val blocks = ArrayList<Block>()
         var cur = Block()
         fun flush() {
@@ -77,7 +79,16 @@ object ScriptParser {
                     else -> {
                         // Büyük harfli isim: diyalog. Sözü anlatıma ekle (karakter adı ve parantezli yönergeler olmadan).
                         val spoken = PAREN.replace(value, "").trim()
-                        if (spoken.isNotEmpty()) cur.narration.append(spoken).append(' ')
+                        val speaker = clean(m.groupValues[1]).trim()
+                        if (spoken.isNotEmpty()) {
+                            cur.narration.append(spoken).append(' ')
+                            // Büyük harfle başlayan kısa bir ad ise konuşan karakterdir.
+                            val isName = speaker.isNotEmpty() && speaker[0].isUpperCase() && speaker.split(' ').size <= 3
+                            if (isName) {
+                                cur.dialogue += Line(speaker, spoken)
+                                if (characters.none { it.equals(speaker, true) }) characters += speaker
+                            }
+                        }
                         val direction = PAREN.find(value)?.value?.trim('(', ')')
                         cur.desc.append(m.groupValues[1].trim()).append(if (direction != null) " ($direction)" else "").append(". ")
                     }
@@ -103,11 +114,12 @@ object ScriptParser {
                 expression = Guess.expression(all),
                 sound = Guess.soundQuery(b.sound.lowercase(TR).ifEmpty { all }, amb),
                 ambience = amb,
-                narration = narration.take(300)
+                narration = narration.take(300),
+                dialogue = b.dialogue.toList()
             )
         }
         val whole = text.lowercase(TR)
-        return Storyboard(title.ifEmpty { "Senaryo" }.take(48), shots, Guess.music(whole))
+        return Storyboard(title.ifEmpty { "Senaryo" }.take(48), shots, Guess.music(whole), characters)
     }
 
     private fun clean(s: String) = MARKDOWN.replace(s, "").trim()
@@ -123,7 +135,7 @@ object Guess {
      * Sözcük başı eşleşmesi: "ağl" → "ağlıyor" eşleşir ama "bağlı" eşleşmez.
      * Boşluk içeren anahtarlar (ör. "iç çek") metnin içinde aranır.
      */
-    private fun has(text: String, vararg keys: String): Boolean {
+    fun has(text: String, vararg keys: String): Boolean {
         val words = text.split(NON_LETTER)
         return keys.any { k -> if (k.contains(' ')) text.contains(k) else words.any { it.startsWith(k) } }
     }

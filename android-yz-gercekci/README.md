@@ -17,6 +17,28 @@ Mimikler (ML Kit, cihaz içi)  +  Sesler (Openverse / Freesound CC0, yoksa sente
 Önizleme  →  MP4 (H.264 + AAC), galeriye kaydet ve paylaş
 ```
 
+## Grok ile gerçek video (isteğe bağlı, ücretli)
+
+Ana ekrandaki **"Grok ile gerçek video"** düğmesi istediğin an açılıp kapatılır. Açıkken her sahne
+hareketsiz fotoğraf yerine **xAI Grok Imagine Video** ile gerçek videoya dönüşür: karakterler hareket
+eder, diyaloglarını kendi sesleriyle (dudak senkronlu) söyler, sahnenin doğal sesi de üretilir.
+
+- Ayarlar → xAI API anahtarı (https://console.x.ai). xAI saniye başına ücretlendirir; uygulama
+  üretmeden önce toplam süreyi ve tahmini tutarı gösterip onay ister.
+- Sahne başına klip süresi varsayılan **15 sn** (Ayarlar'dan 1–15).
+- Sahnenin görseli varsa (Pollinations ya da galeri) videonun ilk karesi olur; yoksa doğrudan tariften üretilir.
+- Tek bir sahneyi de çevirebilirsin: kareye dokun → **Grok ile videoya çevir**.
+
+## Karakter referansları
+
+"Karakterler" şeridinden **+ Karakter ekle** → galeriden resim → senaryodaki adını yaz (ör. KOVAN).
+Adı geçen (ya da diyalogda konuşan) her sahnede o resim Grok'a referans olarak gönderilir; yüz, saç ve
+kıyafet tutarlı kalır. Karakterler cihazda saklanır. Ücretsiz fotoğraf modunda referans kullanılamaz.
+
+## Önizleme
+
+Önizlemeye dokun ya da ⏯ ile **durdur / başlat**; çubukla istediğin saniyeye **sar**.
+
 ## Senaryo nasıl verilir?
 
 1. **"Senaryo şablonunu kopyala"** düğmesine bas.
