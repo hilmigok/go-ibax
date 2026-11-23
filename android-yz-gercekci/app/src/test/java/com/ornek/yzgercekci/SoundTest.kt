@@ -4,7 +4,6 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.util.Base64
 import kotlin.math.abs
 
 class SoundTest {
@@ -73,13 +72,20 @@ class SoundTest {
     }
 
     @Test
-    fun parsesTtsAudio() {
-        val pcm = byteArrayOf(1, 2, 3, 4)
-        val b64 = Base64.getEncoder().encodeToString(pcm)
-        val json = """{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"audio/L16;codec=pcm;rate=24000","data":"$b64"}}]}}]}"""
-        val (bytes, rate) = GeminiClient.extractAudio(json)
-        assertArrayEquals(pcm, bytes)
-        assertEquals(24000, rate)
+    fun parsesDeviceTtsWav() {
+        // 22050 Hz, stereo, 16 bit; iki kare: (+16384,+16384) ve (-16384, 0)
+        val data = byteArrayOf(0x00, 0x40, 0x00, 0x40, 0x00, 0xC0.toByte(), 0x00, 0x00)
+        val wav = java.io.ByteArrayOutputStream().apply {
+            fun i32(v: Int) = write(byteArrayOf(v.toByte(), (v shr 8).toByte(), (v shr 16).toByte(), (v shr 24).toByte()))
+            fun i16(v: Int) = write(byteArrayOf(v.toByte(), (v shr 8).toByte()))
+            write("RIFF".toByteArray()); i32(36 + data.size); write("WAVE".toByteArray())
+            write("fmt ".toByteArray()); i32(16); i16(1); i16(2); i32(22050); i32(22050 * 4); i16(4); i16(16)
+            write("data".toByteArray()); i32(data.size); write(data)
+        }.toByteArray()
+        val pcm = Soundtrack.parseWav(wav)
+        assertEquals(4, pcm.size)                 // 2 kare × (44100 / 22050)
+        assertEquals(0.5f, pcm[0], 1e-4f)
+        assertTrue(pcm.last() < 0f)
     }
 
     @Test

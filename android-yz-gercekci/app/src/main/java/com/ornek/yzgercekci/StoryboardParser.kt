@@ -8,7 +8,7 @@ class StoryboardException(message: String) : Exception(message)
 /** Gemini'nin yazdığı senaryo JSON'unu doğrular ve güvenli sınırlara çeker. */
 object StoryboardParser {
 
-    const val MAX_SHOTS = 8
+    const val MAX_SHOTS = 12
     const val MIN_DURATION = 2.5f
     const val MAX_DURATION = 8f
 

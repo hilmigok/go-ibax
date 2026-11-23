@@ -1,117 +1,61 @@
-# YZ Gerçekçi Sahne (Android)
+# YZ Gerçekçi Sahne (Android) — anahtarsız
 
-Yazdığın metinden **fotoğraf gerçekliğinde** sahneler üreten ve bunları sinematik bir
-**MP4 videoya** dönüştüren uygulama. Önceki uygulamalar şekilleri kendisi çiziyordu;
-bu uygulama görüntüleri **Google'ın görüntü üretme modelleriyle** (Gemini Image / Imagen)
-ürettirir. Bu yüzden sonuç gerçek bir fotoğraf ya da film karesi gibi görünür.
+Senin yazdırdığın senaryodan **fotoğraf gerçekliğinde** sahneler üreten, sesli ve mimikli
+bir **MP4 video** hazırlayan uygulama. **Hiçbir API anahtarı istemez.**
 
 ## Nasıl çalışır?
 
 ```
-Metin ──► Gemini (yönetmen) ──► Senaryo: N çekim, her biri için ayrıntılı İngilizce tarif,
-                                kamera hareketi, atmosfer efekti, süre, altyazı
-                │
-                ▼
-        Görüntü modeli (her çekim için 1 gerçekçi kare, 9:16 ya da 16:9)
-        └─ Karakter tutarlılığı: önceki kare referans olarak gönderilir
-                │
-                ▼
-        FrameRenderer: Ken Burns kamera hareketi + çapraz geçiş + toz/duman/
-        yağmur/kar/kıvılcım/sis + vinyet + film greni + renk düzeltme + altyazı
-                │
-        ┌───────┴────────┐
-        ▼                ▼
-  Canlı önizleme    VideoExporter (1080×1920 ya da 1920×1080, 30 fps, H.264)
+Senaryo (sen yapıştırırsın: JSON ya da düz metin)
+   │  ScriptParser: sahneler, anlatım, altyazı; duygu/ses/efekt tahmini
+   ▼
+Görseller: Pollinations.ai (ücretsiz, anahtarsız, Flux)  —  ya da galeriden kendi görselin
+   ▼
+Mimikler (ML Kit, cihaz içi)  +  Sesler (Openverse / Freesound CC0, yoksa sentez)
++ Fon müziği (sentez)  +  Anlatıcı (telefonun Türkçe metin okuma sesi)
+   ▼
+Önizleme  →  MP4 (H.264 + AAC), galeriye kaydet ve paylaş
 ```
 
-1. **Senaryo:** Gemini'ye bir "yönetmen" talimatı (`StoryboardPrompt.kt`) gönderilir. Model,
-   anlatımını gerçek bir film sahnesi gibi çekimlere böler (geniş açı, yakın plan, detay…).
-   Her çekim için ışık, lens, açı, kıyafet ve duyguyu anlatan ayrıntılı bir tarif yazar.
-2. **Görüntüler:** Her tarif, seçtiğin **üslubun** (sinematik, karanlık fantastik, belgesel,
-   epik tarih, bilim kurgu) eklenmesiyle görüntü modeline gönderilir.
-3. **Tutarlılık:** Gemini görüntü modellerinde önceki kare referans olarak eklenir. Böylece
-   karakterler ve mekân kareden kareye aynı kalır (Ayarlar'dan kapatılabilir).
-4. **Video:** Kareler kamera hareketi ve atmosfer efektleriyle canlandırılır. Önizleme ile
-   video aynı çizim kodunu kullanır; video, önizlemenin birebir aynısıdır.
+## Senaryo nasıl verilir?
 
-## Sesler (v2)
+1. **"Senaryo şablonunu kopyala"** düğmesine bas.
+2. ChatGPT, Gemini ya da Claude'a yapıştır ve en alttaki `[BURAYA HİKÂYENİ YAZ]` yerine hikâyeni yaz.
+3. Çıkan metni (JSON) uygulamadaki kutuya **yapıştır** ve **"Senaryodan videoyu hazırla"**ya bas.
 
-- **Gerçek ses kayıtları:** Gemini her kare için "ne duyulur" sorusunu yanıtlar (ör. *wind ruins*,
-  *woman crying*, *distant explosions*). Uygulama bu sözcüklerle **Freesound.org**'da yalnızca
-  **CC0 (telifsiz, atıf gerektirmeyen)** kayıtları arar, indirir ve kareye yerleştirir.
-  Ücretsiz Freesound anahtarı: https://freesound.org/apiv2/apply → Ayarlar'a yaz.
-- **Anahtarsız gerçek kayıtlar:** Freesound anahtarı yoksa sesler **Openverse**'ten (Freesound,
-  Wikimedia, Jamendo'yu tarayan açık arama motoru) yalnızca CC0 / kamu malı kayıtlar arasından aranır.
-- **CapCut:** CapCut'ın ses kütüphanesine dışarıdan erişilemez ve oradaki sesler yalnızca CapCut içinde
-  kullanılmak üzere lisanslıdır. "Fon müziği" anahtarını kapatıp videoyu kaydet, sonra CapCut'ta kendi
-  müziğini ekle.
-- **Hiçbiri bulunamazsa da ses var:** rüzgâr, yağmur, ateş çıtırtısı, uzak patlamalar, şehir uğultusu ve
-  kuş sesleri cihazda sıfırdan sentezlenir (`Synth.kt`).
-- **Fon müziği:** filmin havasına göre (hüzünlü, karanlık, epik, gergin, umutlu) cihazda bestelenir.
-- **Anlatıcı:** Gemini'nin gerçekçi sesiyle Türkçe seslendirme (`gemini-2.5-flash-preview-tts`). Kare
-  süreleri anlatıma göre uzar; anlatıcı konuşurken ortam sesi ve müzik otomatik kısılır.
-- Hepsi karıştırılıp videoya **AAC ses kanalı** olarak eklenir; önizlemede de duyulur.
+JSON şart değil, **düz metin** de olur:
+- Boş satırla ayrılan her paragraf ya da `Sahne 1`, `Kare 2` gibi başlıklar → bir sahne
+- Tanınan etiketler: `Başlık:`, `Görsel:`, `Anlatım:`, `Altyazı:` / `Ekran yazısı:`, `Ses:` / `Efekt:`
+- `KOVAN: (İç çekerek) Başımıza iş alacağız…` gibi diyaloglar anlatıcıya okutulur
+- Duygu (ağlama, korku, gülümseme…), ortam sesi ve efektler metindeki sözcüklerden tahmin edilir
 
-## Mimikler (v2)
+> En gerçekçi görseller için görsel tarifleri **İngilizce** olmalı; şablon bunu zaten istiyor.
 
-Karakterler yapay zekânın ürettiği fotoğraflar olduğu için mimikler fotoğrafın üstünde yapılır
-(Blender gibi 3D araçlar burada işe yaramaz):
+## Görseller
 
-1. **Google ML Kit** yüzleri ve göz/ağız noktalarını bulur (cihaz içinde, ücretsiz, internetsiz).
-2. Yüz bölgesi ince bir ağ (mesh) ile esnetilir: **göz kırpma**, **nefes**, hafif **baş hareketi**
-   ve Gemini'nin seçtiği duyguya göre ifade: *hüzün* (kaşların içi kalkar, ağız köşeleri düşer),
-   *ağlama* (kısık gözler, titreyen dudak, hıçkırık nefesi), *korku*, *öfke*, *şaşkınlık*, *gülümseme*.
-3. Esneme bölge kenarında sıfıra iner; yüz, fotoğrafın geri kalanıyla dikişsiz birleşir.
+- **Otomatik:** Pollinations.ai'nin ücretsiz Flux modeli. Anahtar istemez ama ücretsiz sunucu
+  yoğun olabilir. Uygulama kareleri sırayla üretir, yoğunlukta bekleyip kendiliğinden tekrar dener.
+- **Kendi görselin:** Bir kareye dokun → **Galeriden seç**. "Görselleri otomatik üret"i kapatırsan
+  uygulama yalnızca sahneleri hazırlar, görselleri sen seçersin.
+- Kareye dokunup tarifi düzenleyerek yeniden üretebilir ya da fotoğraf olarak kaydedebilirsin.
 
-Uzak/küçük yüzlere mimik uygulanmaz. Ana ekrandaki anahtarlarla ses, anlatıcı ve mimikler ayrı
-ayrı kapatılabilir.
+## Sesler
 
-Bir kareyi beğenmediysen küçük resmine dokun. Tarifi düzenleyip yalnızca o kareyi
-yeniden üretebilir ya da fotoğrafı tek başına kaydedebilirsin.
+- Gerçek kayıtlar **Openverse**'ten (anahtarsız) ya da Freesound'dan (isteğe bağlı ücretsiz anahtar);
+  yalnızca **CC0 / kamu malı**, yani telif sorunu yok. Bulunamazsa sesler cihazda sentezlenir.
+- **Fon müziği** filmin havasına göre cihazda bestelenir. CapCut'ta kendi müziğini ekleyeceksen kapat.
+- **Anlatıcı** telefonun metin okuma motorudur. Doğal gelmiyorsa Ayarlar'dan "Google Konuşma
+  Hizmetleri"ni seçip Türkçe ses paketini indir.
 
-## Kurulum ve kullanım
+## Mimikler
 
-1. APK'yı kur: https://github.com/hilmigok/go-ibax/releases/download/apk-gercekci-latest/yz-gercekci.apk
-2. **Ayarlar**'a gir ve Gemini API anahtarını yaz (https://aistudio.google.com/apikey).
-3. Sahneyi anlat, üslubu ve kare sayısını seç, **Üret**'e bas.
-4. Önizleme hoşuna gittiyse **Videoyu kaydet ve paylaş**. Video *Filmler/YZGercekci*,
-   fotoğraflar *Resimler/YZGercekci* klasörüne kaydedilir.
+Google ML Kit yüzleri ve göz/ağız noktalarını bulur (cihaz içinde). Yüz hafifçe esnetilerek göz
+kırpma, nefes, baş hareketi ve duyguya göre ifade (hüzün, ağlama, korku, öfke, şaşkınlık,
+gülümseme) eklenir.
 
-### Örnek anlatım
+## Kurulum
 
-> Savaşla yıkılmış bir şehrin harabeleri. Gökyüzünde fırtına bulutları arasında devasa,
-> karanlık kanatlı bir melek süzülüyor. Aşağıda toz ve duman içinde başörtülü iki anne
-> çocuklarına sarılmış, ağlıyorlar. Hüzünlü, sinematik.
-
-Üslup: **Karanlık fantastik**, kare sayısı: 4, biçim: Dikey 9:16.
-
-## Modeller ve ücret
-
-| Ayar | Varsayılan | Not |
-|---|---|---|
-| Senaryo modeli | `gemini-2.5-flash` | Ücretsiz kotada çalışır |
-| Görüntü modeli | `gemini-2.5-flash-image` | Tutarlılık referansını destekler |
-| | `gemini-3-pro-image-preview` | Daha kaliteli ve daha pahalı |
-| | `imagen-4.0-generate-001` / `imagen-4.0-ultra-generate-001` | Çok gerçekçi; referans desteklemez, çocuk figürleri üretmez |
-
-> **Önemli:** Görüntü üreten modeller çoğunlukla Google AI Studio'da **faturalandırmanın açık**
-> olmasını ister. Kare başına yaklaşık birkaç sent ödenir. Ücretsiz anahtarla "kota aşıldı"
-> ya da "faturalandırma gerekiyor" hatası alırsan sebebi budur.
-
-## Proje yapısı
-
-| Dosya | Görev |
-|---|---|
-| `StoryboardPrompt.kt` | Yönetmen talimatı, üslup ve oran ekleri |
-| `StoryboardParser.kt` | Senaryo JSON'unu doğrular, sınırlar (en fazla 8 kare, 2,5–8 sn) |
-| `GeminiClient.kt` | Senaryo ve görüntü istekleri (Gemini Image + Imagen) |
-| `Timeline.kt` | Zaman çizelgesi, çapraz geçiş, Ken Burns hesapları |
-| `Particles.kt` | Deterministik atmosfer parçacıkları |
-| `FrameRenderer.kt` | Bir video karesini çizer (önizleme + video ortak) |
-| `VideoExporter.kt` | Canvas → OpenGL dokusu → H.264 + AAC ses → MP4 → galeri |
-| `FaceFinder.kt` / `Mimic.kt` | Yüz noktaları (ML Kit) / mimik esnetme hesabı |
-| `FreesoundClient.kt` / `AudioDecoder.kt` | CC0 ses arama-indirme / MP3 → PCM |
-| `Synth.kt` / `Soundtrack.kt` | Ortam sesi ve müzik sentezi / karıştırma, ducking |
+APK: https://github.com/hilmigok/go-ibax/releases/download/apk-gercekci-latest/yz-gercekci.apk
 
 ## Geliştirme
 
@@ -120,6 +64,3 @@ cd android-yz-gercekci
 gradle testDebugUnitTest   # birim testleri
 gradle assembleDebug       # APK
 ```
-
-GitHub Actions (`.github/workflows/android-gercekci-build.yml`) her değişiklikte testleri
-çalıştırır, APK'yı derler ve Releases'e yükler.

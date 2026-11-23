@@ -1,9 +1,12 @@
 package com.ornek.yzgercekci
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
@@ -14,10 +17,10 @@ import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import com.google.android.material.slider.Slider
 import com.ornek.yzgercekci.databinding.ActivityMainBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -37,6 +40,15 @@ class MainActivity : AppCompatActivity() {
     private var format = VideoFormat.PORTRAIT_9_16
     private var style = VisualStyle.CINEMATIC
     private var job: Job? = null
+    private var seedBase = 0
+    private var pickIndex = -1
+
+    /** Bir kareye galeriden görsel seçmek için. */
+    private val pickImage = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        val i = pickIndex
+        pickIndex = -1
+        if (uri != null && i >= 0) useGalleryImage(i, uri)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -57,10 +69,16 @@ class MainActivity : AppCompatActivity() {
         binding.style.setText(style.label, false)
         binding.style.setOnItemClickListener { _, _, pos, _ -> style = styles[pos] }
 
-        binding.shotCount.addOnChangeListener(Slider.OnChangeListener { _, value, _ ->
-            binding.shotCountLabel.text = getString(R.string.shot_count, value.toInt())
-        })
-        binding.shotCountLabel.text = getString(R.string.shot_count, binding.shotCount.value.toInt())
+        binding.btnTemplate.setOnClickListener {
+            val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+            cm.setPrimaryClip(ClipData.newPlainText("Senaryo şablonu", StoryboardPrompt.TEMPLATE))
+            Toast.makeText(this, R.string.template_copied, Toast.LENGTH_LONG).show()
+        }
+        binding.btnPaste.setOnClickListener {
+            val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+            val text = cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString()
+            if (!text.isNullOrBlank()) binding.prompt.setText(text)
+        }
 
         binding.captions.setOnCheckedChangeListener { _, checked -> binding.preview.captions = checked }
         binding.mimics.setOnCheckedChangeListener { _, checked -> binding.preview.mimics = checked }
@@ -140,16 +158,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun apiKeyOrSettings(): SecretStore? {
-        val store = SecretStore(this)
-        if (store.apiKey.isBlank()) {
-            binding.status.text = getString(R.string.need_key)
-            startActivity(Intent(this, SettingsActivity::class.java))
-            return null
-        }
-        return store
-    }
-
     // ---------------------------------------------------------------- üretim
 
     private fun generateAll() {
@@ -158,25 +166,25 @@ class MainActivity : AppCompatActivity() {
             binding.prompt.error = getString(R.string.empty_prompt)
             return
         }
-        val store = apiKeyOrSettings() ?: return
+        val store = SecretStore(this)
         val portrait = format.isPortrait
-        val count = binding.shotCount.value.toInt()
         val captions = binding.captions.isChecked
         val narration = binding.narration.isChecked && binding.sounds.isChecked
+        val autoImages = binding.autoImages.isChecked
         val chosenStyle = style
         hideKeyboard()
 
         job = lifecycleScope.launch {
             setBusy(true, getString(R.string.status_planning), indeterminate = true)
             try {
-                val client = GeminiClient(store.apiKey)
-                val newBoard = withModel(ModelPicker.Kind.TEXT, store, client) { model ->
-                    val json = client.generateStoryboard(
-                        model,
-                        StoryboardPrompt.userMessage(text, count, portrait, captions, narration)
-                    )
-                    StoryboardParser.parse(json)
+                var newBoard = withContext(Dispatchers.Default) { ScriptParser.parse(text) }
+                if (captions) {
+                    // Ekran yazısı yoksa anlatımı altyazı olarak göster (TikTok tarzı).
+                    newBoard = newBoard.copy(shots = newBoard.shots.map {
+                        if (it.caption.isEmpty() && it.narration.isNotEmpty()) it.copy(caption = it.narration.take(110)) else it
+                    })
                 }
+                seedBase = (System.currentTimeMillis() % 100_000).toInt()
                 clearImages()
                 board = newBoard
                 boardPortrait = portrait
@@ -187,18 +195,16 @@ class MainActivity : AppCompatActivity() {
 
                 var failures = 0
                 var lastError = ""
+                binding.status.text = getString(R.string.status_parsed, newBoard.shots.size)
                 for (i in newBoard.shots.indices) {
+                    if (!autoImages) break
                     setBusy(true, getString(R.string.status_image, i + 1, newBoard.shots.size), indeterminate = false)
                     binding.progress.setProgressCompat(i * 100 / newBoard.shots.size, true)
                     try {
-                        images[i] = renderShot(client, store, newBoard, i, chosenStyle, portrait)
-                    } catch (e: GeminiException) {
+                        images[i] = renderShot(store, newBoard, i, chosenStyle, portrait, seedBase + i)
+                    } catch (e: ServiceException) {
                         failures++
                         lastError = e.message.orEmpty()
-                        // Kota/anahtar hatasında diğer kareleri denemenin anlamı yok.
-                        if (lastError.contains("(401") || lastError.contains("(403") || lastError.contains("(404") ||
-                            lastError.contains("faturalandırma")
-                        ) throw e
                     }
                     rebuildThumbs()
                     showContent()
@@ -211,7 +217,7 @@ class MainActivity : AppCompatActivity() {
                 // Sesler: gerçek kayıtlar / sentez, fon müziği, anlatıcı.
                 var soundNote = ""
                 if (binding.sounds.isChecked) {
-                    val (fitted, pcm, note) = buildSound(client, store, board ?: newBoard, narration)
+                    val (fitted, pcm, note) = buildSound(store, board ?: newBoard, narration)
                     board = fitted
                     soundtrack = pcm
                     soundNote = note
@@ -220,7 +226,9 @@ class MainActivity : AppCompatActivity() {
                 restartPlayback()
                 setBusy(false)
                 val b = board ?: newBoard
-                binding.status.text = if (failures == 0) {
+                binding.status.text = if (!autoImages) {
+                    getString(R.string.status_need_images)
+                } else if (failures == 0) {
                     if (soundNote.isNotEmpty() || faces.any { it.isNotEmpty() }) {
                         getString(R.string.status_ready_sound, b.title, faces.sumOf { it.size }, soundNote)
                     } else getString(R.string.status_ready, b.title)
@@ -253,19 +261,28 @@ class MainActivity : AppCompatActivity() {
      * Anlatıcı sesini üretir, kare sürelerini ona göre ayarlar, her kare için gerçek bir ses
      * kaydı arar (Freesound CC0; yoksa sentez), fon müziğini üretir ve hepsini karıştırır.
      */
-    private suspend fun buildSound(client: GeminiClient, store: SecretStore, b: Storyboard, narration: Boolean): SoundResult {
+    private suspend fun buildSound(store: SecretStore, b: Storyboard, narration: Boolean): SoundResult {
         val n = b.shots.size
         val voices = ArrayList<FloatArray?>()
         var voiceError = ""
-        for ((i, shot) in b.shots.withIndex()) {
-            if (!narration || shot.narration.isEmpty() || voiceError.isNotEmpty()) { voices += null; continue }
-            binding.status.text = getString(R.string.status_voice, i + 1, n)
-            voices += try {
-                withModel(ModelPicker.Kind.TTS, store, client) { model -> client.generateSpeech(model, store.voice, shot.narration) }
-            } catch (e: GeminiException) {
-                voiceError = e.message.orEmpty()   // bir kez başarısız olursa diğerlerini deneme
-                null
+        val narrator = if (narration && b.shots.any { it.narration.isNotEmpty() }) DeviceNarrator(this) else null
+        try {
+            if (narrator != null) voiceError = narrator.open().orEmpty()
+            for ((i, shot) in b.shots.withIndex()) {
+                if (narrator == null || shot.narration.isEmpty() || voiceError.isNotEmpty()) { voices += null; continue }
+                binding.status.text = getString(R.string.status_voice, i + 1, n)
+                voices += try {
+                    narrator.speak(shot.narration, cacheDir)
+                } catch (e: Exception) {
+                    voiceError = e.message ?: "anlatım üretilemedi"   // bir kez başarısız olursa diğerlerini deneme
+                    null
+                }
             }
+        } catch (e: Exception) {
+            voiceError = e.message ?: "metin okuma motoru açılamadı"
+            while (voices.size < n) voices += null
+        } finally {
+            narrator?.close()
         }
         val fitted = Soundtrack.fitDurations(b, voices.map { (it?.size ?: 0).toFloat() / Soundtrack.SR })
 
@@ -343,72 +360,62 @@ class MainActivity : AppCompatActivity() {
         return null
     }
 
-    /** Tek bir kareyi üretir; tutarlılık açıksa en yakın önceki kareyi referans gönderir. */
+    /** Tek bir kareyi ücretsiz Pollinations ile üretir. */
     private suspend fun renderShot(
-        client: GeminiClient, store: SecretStore, b: Storyboard, i: Int, s: VisualStyle, portrait: Boolean,
+        store: SecretStore, b: Storyboard, i: Int, s: VisualStyle, portrait: Boolean, seed: Int,
         promptOverride: String? = null
     ): Bitmap {
-        val ref = if (store.consistency && !GeminiClient.isImagen(store.imageModel)) {
-            (i - 1 downTo 0).firstNotNullOfOrNull { images.getOrNull(it) }
-                ?: if (i == 0) images.drop(1).firstOrNull { it != null } else null
-        } else null
-        val refBytes = ref?.let { withContext(Dispatchers.Default) { ImageSaver.referenceJpeg(it) } }
         val prompt = StoryboardPrompt.imagePrompt(promptOverride ?: b.shots[i].prompt, s, portrait)
-        return withModel(ModelPicker.Kind.IMAGE, store, client) { model ->
-            // Imagen referans görüntü desteklemez.
-            val bytes = client.generateImage(model, prompt, portrait, refBytes.takeUnless { GeminiClient.isImagen(model) })
-            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                ?: throw GeminiException("Görüntü çözülemedi", retryable = true)
-        }
-    }
-
-    private var modelList: List<ModelInfo>? = null
-
-    /**
-     * Modeli çağırır; Google modeli emekliye ayırmışsa ya da bu anahtara kapalıysa,
-     * kullanılabilir modeller arasından uygun olanı seçer, Ayarlar'a kaydeder ve tekrar dener.
-     */
-    private suspend fun <T> withModel(
-        kind: ModelPicker.Kind, store: SecretStore, client: GeminiClient, block: suspend (String) -> T
-    ): T {
-        val current = when (kind) {
-            ModelPicker.Kind.TEXT -> store.textModel
-            ModelPicker.Kind.IMAGE -> store.imageModel
-            ModelPicker.Kind.TTS -> store.ttsModel
-        }
-        try {
-            return withContext(Dispatchers.IO) { retrying { block(current) } }
-        } catch (e: GeminiException) {
-            if (!e.modelUnavailable) throw e
-            val models = modelList ?: withContext(Dispatchers.IO) { client.listModels() }.also { modelList = it }
-            val replacement = ModelPicker.pick(kind, models.filter { it.name != current }, e.suggestedModel)
-                ?: throw GeminiException(
-                    "“$current” artık kullanılamıyor ve anahtarınla uygun başka bir model bulunamadı. " +
-                        "Ayarlar’dan model adını değiştir. (${e.message.orEmpty().take(120)})"
-                )
-            when (kind) {
-                ModelPicker.Kind.TEXT -> store.textModel = replacement
-                ModelPicker.Kind.IMAGE -> store.imageModel = replacement
-                ModelPicker.Kind.TTS -> store.ttsModel = replacement
+        val (w, h) = PollinationsClient.size(portrait)
+        val client = PollinationsClient(store.imageModel)
+        return withContext(Dispatchers.IO) {
+            retrying {
+                val bytes = client.generate(prompt, w, h, seed)
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    ?: throw ServiceException("Görüntü çözülemedi", retryable = true)
             }
-            binding.status.text = getString(R.string.model_switched, current, replacement)
-            return withContext(Dispatchers.IO) { retrying { block(replacement) } }
         }
     }
 
-    /** Geçici hatalarda (429, 5xx, bağlantı) artan beklemeyle en fazla 3 kez dener. */
+    /** Geçici hatalarda (yoğunluk, bağlantı) artan beklemeyle en fazla 4 kez dener. */
     private suspend fun <T> retrying(block: suspend () -> T): T {
-        var wait = 4_000L
-        repeat(2) {
+        for (wait in longArrayOf(8_000L, 20_000L, 40_000L)) {
             try {
                 return block()
-            } catch (e: GeminiException) {
+            } catch (e: ServiceException) {
                 if (!e.retryable) throw e
                 delay(wait)
-                wait *= 3
             }
         }
         return block()
+    }
+
+    /** Galeriden seçilen görseli kareye koyar (yazılımsal bitmap; video çizimi için gerekli). */
+    private fun useGalleryImage(i: Int, uri: Uri) {
+        lifecycleScope.launch {
+            try {
+                val bmp = withContext(Dispatchers.IO) {
+                    val src = ImageDecoder.createSource(contentResolver, uri)
+                    ImageDecoder.decodeBitmap(src) { decoder, info, _ ->
+                        decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                        val max = maxOf(info.size.width, info.size.height)
+                        if (max > 2048) {
+                            val k = 2048f / max
+                            decoder.setTargetSize((info.size.width * k).toInt(), (info.size.height * k).toInt())
+                        }
+                    }
+                }
+                if (i >= images.size) return@launch
+                images[i]?.let { old -> binding.preview.post { old.recycle() } }
+                images[i] = bmp
+                faces[i] = withContext(Dispatchers.Default) { FaceFinder.find(bmp) }
+                rebuildThumbs()
+                showContent()
+                updateButtons()
+            } catch (e: Exception) {
+                binding.status.text = getString(R.string.error_prefix, getString(R.string.image_load_failed))
+            }
+        }
     }
 
     /** Küçük resme dokununca: tarifi düzenleyip o kareyi yeniden üret ya da fotoğrafı kaydet. */
@@ -430,7 +437,10 @@ class MainActivity : AppCompatActivity() {
             .setMessage(R.string.shot_dialog_info)
             .setView(box)
             .setPositiveButton(R.string.regenerate) { _, _ -> regenerate(i, input.text.toString().trim()) }
-            .setNegativeButton(android.R.string.cancel, null)
+        dialog.setNegativeButton(R.string.pick_gallery) { _, _ ->
+            pickIndex = i
+            pickImage.launch("image/*")
+        }
         if (images.getOrNull(i) != null) {
             dialog.setNeutralButton(R.string.save_photo) { _, _ -> savePhoto(i) }
         }
@@ -439,14 +449,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun regenerate(i: Int, newPrompt: String) {
         val b = board ?: return
-        val store = apiKeyOrSettings() ?: return
+        val store = SecretStore(this)
         val chosenStyle = style
         val portrait = boardPortrait
         job = lifecycleScope.launch {
             setBusy(true, getString(R.string.status_image, i + 1, b.shots.size), indeterminate = true)
             try {
                 val prompt = newPrompt.ifEmpty { b.shots[i].prompt }
-                val bmp = renderShot(GeminiClient(store.apiKey), store, b, i, chosenStyle, portrait, prompt)
+                val seed = (System.nanoTime() % 1_000_000).toInt().let { if (it < 0) -it else it }
+                val bmp = renderShot(store, b, i, chosenStyle, portrait, seed, prompt)
                 val updated = b.copy(shots = b.shots.toMutableList().also { it[i] = it[i].copy(prompt = prompt) })
                 board = updated
                 images[i]?.let { old -> binding.preview.post { old.recycle() } }
@@ -596,7 +607,6 @@ class MainActivity : AppCompatActivity() {
         binding.btnExport.isEnabled = !busy && board != null && hasImages
         binding.btnSavePhotos.isEnabled = !busy && hasImages
         binding.btnCancel.visibility = if (busy) View.VISIBLE else View.GONE
-        binding.shotCount.isEnabled = !busy
         for (i in 0 until binding.formatGroup.childCount) binding.formatGroup.getChildAt(i).isEnabled = !busy
     }
 

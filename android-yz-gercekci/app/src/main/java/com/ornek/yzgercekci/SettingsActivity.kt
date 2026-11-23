@@ -1,5 +1,6 @@
 package com.ornek.yzgercekci
 
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -15,25 +16,17 @@ class SettingsActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         val store = SecretStore(this)
-        // Kayıtlı anahtar ekranda gösterilmez; alan boş bırakılırsa mevcut anahtar korunur.
-        if (store.apiKey.isNotEmpty()) binding.apiKey.hint = "•••••••• (kayıtlı — değiştirmek için yaz)"
-        binding.textModel.setText(store.textModel)
         binding.imageModel.setText(store.imageModel)
-        binding.consistency.isChecked = store.consistency
         if (store.freesoundKey.isNotEmpty()) binding.freesoundKey.hint = "•••••••• (kayıtlı — değiştirmek için yaz)"
-        binding.ttsModel.setText(store.ttsModel)
-        binding.voice.setText(store.voice)
 
+        binding.btnTts.setOnClickListener {
+            runCatching { startActivity(Intent("com.android.settings.TTS_SETTINGS")) }
+                .onFailure { Toast.makeText(this, R.string.tts_settings_missing, Toast.LENGTH_LONG).show() }
+        }
         binding.btnSave.setOnClickListener {
-            val newKey = binding.apiKey.text?.toString()?.trim().orEmpty()
-            if (newKey.isNotEmpty()) store.apiKey = newKey
-            store.textModel = binding.textModel.text?.toString().orEmpty()
             store.imageModel = binding.imageModel.text?.toString().orEmpty()
-            store.consistency = binding.consistency.isChecked
             val fs = binding.freesoundKey.text?.toString()?.trim().orEmpty()
             if (fs.isNotEmpty()) store.freesoundKey = fs
-            store.ttsModel = binding.ttsModel.text?.toString().orEmpty()
-            store.voice = binding.voice.text?.toString().orEmpty()
             Toast.makeText(this, R.string.saved, Toast.LENGTH_SHORT).show()
             finish()
         }

@@ -58,6 +58,6 @@ class StoryboardParserTest {
         assertTrue(p.startsWith("an angel"))
         assertTrue(p.contains("vertical 9:16"))
         assertTrue(p.contains("dark fantasy"))
-        assertTrue(StoryboardPrompt.userMessage("metin", 3, false, false).contains("16:9"))
+        assertTrue(StoryboardPrompt.TEMPLATE.contains("[BURAYA HİKÂYENİ YAZ]"))
     }
 }

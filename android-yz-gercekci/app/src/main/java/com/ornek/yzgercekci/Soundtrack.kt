@@ -112,6 +112,44 @@ object Soundtrack {
         ((hi shl 8) or lo).toShort() / 32768f
     }
 
+    /**
+     * WAV (PCM 16 bit, mono/stereo) dosyasını okuyup mono, [SR] Hz FloatArray'e çevirir.
+     * Cihazın metin okuma motoru anlatımı bu biçimde yazar.
+     */
+    fun parseWav(bytes: ByteArray): FloatArray {
+        fun u16(i: Int) = (bytes[i].toInt() and 0xFF) or ((bytes[i + 1].toInt() and 0xFF) shl 8)
+        fun u32(i: Int) = u16(i) or (u16(i + 2) shl 16)
+        if (bytes.size < 12 || String(bytes, 0, 4, Charsets.US_ASCII) != "RIFF" ||
+            String(bytes, 8, 4, Charsets.US_ASCII) != "WAVE"
+        ) throw IllegalArgumentException("WAV değil")
+        var pos = 12
+        var channels = 1
+        var rate = 22050
+        var bits = 16
+        while (pos + 8 <= bytes.size) {
+            val id = String(bytes, pos, 4, Charsets.US_ASCII)
+            var size = u32(pos + 4)
+            val body = pos + 8
+            if (size < 0 || body + size > bytes.size) size = bytes.size - body   // akışla yazılmış eksik başlık
+            if (id == "fmt ") {
+                channels = u16(body + 2).coerceAtLeast(1)
+                rate = u32(body + 4)
+                bits = u16(body + 14)
+            } else if (id == "data") {
+                if (bits != 16) throw IllegalArgumentException("Yalnızca 16 bit WAV destekleniyor")
+                val frames = size / (2 * channels)
+                val mono = FloatArray(frames) { f ->
+                    var sum = 0
+                    for (c in 0 until channels) sum += u16(body + (f * channels + c) * 2).toShort().toInt()
+                    sum / channels / 32768f
+                }
+                return resample(mono, rate)
+            }
+            pos = body + size + (size and 1)
+        }
+        throw IllegalArgumentException("WAV verisi bulunamadı")
+    }
+
     /** Döngüye girecek bir kaydın başını ve sonunu birbirine yedirir (çıt sesi olmasın). */
     fun makeLoopable(clip: FloatArray, fadeSeconds: Float = 0.4f): FloatArray {
         val f = min((fadeSeconds * SR).toInt(), clip.size / 3)

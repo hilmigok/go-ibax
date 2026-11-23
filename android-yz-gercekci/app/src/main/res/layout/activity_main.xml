@@ -120,7 +120,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:hint="@string/prompt_label">
+            android:hint="@string/prompt_label"
+            app:helperText="@string/prompt_helper">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/prompt"
@@ -128,10 +129,33 @@
                 android:layout_height="wrap_content"
                 android:gravity="top|start"
                 android:inputType="textMultiLine|textCapSentences"
-                android:maxLength="1200"
-                android:maxLines="6"
-                android:minLines="3" />
+                android:maxLength="30000"
+                android:maxLines="12"
+                android:minLines="4"
+                android:scrollbars="vertical" />
         </com.google.android.material.textfield.TextInputLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnTemplate"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/copy_template" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnPaste"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="@string/paste" />
+        </LinearLayout>
 
         <com.google.android.material.textfield.TextInputLayout
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
@@ -147,20 +171,13 @@
                 android:inputType="none" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <TextView
-            android:id="@+id/shotCountLabel"
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/autoImages"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp" />
-
-        <com.google.android.material.slider.Slider
-            android:id="@+id/shotCount"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:stepSize="1"
-            android:value="4"
-            android:valueFrom="1"
-            android:valueTo="8" />
+            android:layout_marginTop="8dp"
+            android:checked="true"
+            android:text="@string/auto_images" />
 
         <com.google.android.material.materialswitch.MaterialSwitch
             android:id="@+id/captions"

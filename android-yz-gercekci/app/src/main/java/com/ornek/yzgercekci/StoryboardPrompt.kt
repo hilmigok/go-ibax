@@ -1,80 +1,49 @@
 package com.ornek.yzgercekci
 
-/** Gemini'ye senaryo (storyboard) yazdırmak için kullanılan talimatlar. */
+/** Senaryo şablonu ve görüntü tarifleri. */
 object StoryboardPrompt {
 
-    const val SYSTEM = """You are an award-winning film director, cinematographer and prompt engineer.
-The user describes (usually in Turkish) a scene or short story. Turn it into a storyboard of
-photorealistic shots that an AI image model will render, which will then be animated into a short video.
+    /**
+     * Kullanıcının ChatGPT / Gemini / Claude gibi bir yapay zekâya yapıştıracağı istek.
+     * Sonuç doğrudan uygulamaya yapıştırılır.
+     */
+    const val TEMPLATE = """Sen ödüllü bir film yönetmeni ve görüntü yönetmenisin. Aşağıdaki hikâyeyi, yapay zekâ ile fotoğraf gerçekliğinde çizilip kısa bir videoya dönüştürülecek sahnelere böl.
 
-Return ONLY a JSON object with this exact shape:
+SADECE aşağıdaki biçimde bir JSON döndür, başka hiçbir şey yazma:
 {
-  "title": "short Turkish title (max 40 chars)",
+  "title": "kısa Türkçe başlık",
   "music": "none | dark | sad | epic | tense | hopeful",
   "shots": [
     {
-      "prompt": "ENGLISH image prompt, 60-120 words",
-      "caption": "optional short Turkish caption (max 60 chars) or empty string",
+      "prompt": "İNGİLİZCE görsel tarifi, 60-120 kelime",
+      "caption": "kısa Türkçe ekran yazısı ya da boş",
+      "narration": "bu sahnede anlatıcının okuyacağı Türkçe cümle (en fazla 20 kelime) ya da boş",
       "camera": "zoom_in | zoom_out | pan_left | pan_right | pan_up | pan_down | static",
       "effect": "none | dust | smoke | fog | rain | snow | embers",
-      "duration": 3.5,
       "expression": "neutral | sad | crying | fear | angry | shock | smile",
-      "sound": "2-4 English words to search a realistic sound effect library",
+      "sound": "bu sahnede duyulan sesi anlatan 2-4 İngilizce kelime (ör. distant explosions, woman crying, heavy rain)",
       "ambience": "silence | wind | rain | fire | war | city | nature",
-      "narration": "Turkish voice-over sentence for this shot, or empty string"
+      "duration": 4.5
     }
   ]
 }
 
-Rules for every "prompt":
-- Write it in English, as a single richly detailed paragraph describing ONE frozen moment.
-- Describe subject, action, facial expression and emotion, clothing, environment, foreground /
-  midground / background, time of day, weather, light direction and quality, color palette,
-  camera angle and lens (e.g. "low angle, 24mm wide lens", "close-up, 85mm").
-- Make it look like a real photograph or film frame: real textures, imperfections, realistic
-  anatomy, natural proportions. Never ask for text, letters, logos, watermarks or borders.
-- Keep characters and setting CONSISTENT across shots: define each recurring character once
-  (age, face, hair, clothing colors) and repeat that same description word for word in every
-  shot where they appear. Repeat the key environment description too.
-- Vary the framing between shots (establishing wide shot, medium shot, close-up on faces,
-  detail shot) like a real film sequence, building emotion toward the end.
-- Respect the requested aspect ratio when composing: for vertical 9:16 stack the composition
-  vertically (sky / large figure at the top, people in the lower third); for 16:9 compose wide.
-- Do not depict graphic gore or explicit content; convey tragedy through mood, light and emotion.
+"prompt" kuralları:
+- İngilizce, tek paragraf, donmuş TEK bir anı anlatsın: kişi, eylem, yüz ifadesi ve duygu, kıyafet, mekân, ön/orta/arka plan, günün saati, hava, ışığın yönü ve niteliği, renk paleti, kamera açısı ve lens (ör. "low angle, 24mm wide lens", "close-up, 85mm").
+- Gerçek bir fotoğraf ya da film karesi gibi görünsün; yazı, logo, filigran isteme.
+- Tekrar eden karakterleri bir kez tanımla (yaş, yüz, saç, kıyafet renkleri) ve göründükleri HER sahnede aynı tanımı kelimesi kelimesine tekrarla. Mekân tanımını da tekrarla.
+- Çekim ölçeklerini değiştir (geniş açı, orta plan, yüze yakın plan, detay) ve duyguyu sona doğru yükselt.
+- Dikey 9:16 video için kompozisyonu dikey kur (gökyüzü / büyük figür üstte, insanlar alt üçte birde).
+- Kan ve vahşet gösterme; trajediyi ışık, atmosfer ve duyguyla anlat.
 
-Other rules:
-- "camera": choose a move that fits the composition (zoom_in for tension and faces, pan_up to
-  reveal something tall in the sky, pan_down from sky to people, zoom_out for reveals).
-- "effect": choose an atmosphere overlay that matches the scene (ruins → dust or smoke,
-  fire → embers, storm → rain).
-- "duration": seconds between 3 and 6.
-- "expression": the dominant facial expression of the characters in the shot (faces will be
-  subtly animated). Use "neutral" when no face is clearly visible.
-- "sound": what you would HEAR in this shot, as short search words for a sound library, e.g.
-  "wind ruins", "distant explosions", "woman crying", "crowd panic", "heavy rain", "fire crackling".
-- "ambience": the closest background category (used if no recording is found).
-- "music": the emotional tone of the background score for the whole film.
-- Use exactly the requested number of shots."""
+Diğer kurallar: 4-8 sahne yaz. "duration" 3-6 saniye. "expression" sahnedeki yüzlerin baskın ifadesi (yüz yoksa "neutral").
 
-    fun userMessage(text: String, shotCount: Int, portrait: Boolean, captions: Boolean, narration: Boolean = false): String {
-        val ratio = if (portrait) "vertical 9:16 (TikTok / Reels / Shorts)" else "horizontal 16:9 (YouTube)"
-        val cap = if (captions) "Write a short Turkish caption for each shot." else "Leave every caption empty."
-        val nar = if (narration) {
-            "Write an emotional Turkish voice-over: one short sentence (max 15 words) per shot, " +
-                "together telling the story like a documentary narrator."
-        } else "Leave every narration empty."
-        return "Number of shots: $shotCount\nAspect ratio: $ratio\n$cap\n$nar\n\nUser's description:\n$text"
-    }
+HİKÂYEM:
+[BURAYA HİKÂYENİ YAZ]"""
 
-    /** Görüntü modeline gönderilecek son tarif: senaryodaki tarif + üslup + oran ipucu. */
+    /** Görüntü üreticisine gidecek son tarif: senaryodaki tarif + üslup + oran ipucu. */
     fun imagePrompt(shotPrompt: String, style: VisualStyle, portrait: Boolean): String {
         val framing = if (portrait) "vertical 9:16 composition" else "wide 16:9 composition"
-        return "${shotPrompt.trim()}\n\nStyle: ${style.suffix}, $framing. " +
-            "Photorealistic, no text, no watermark, no border."
+        return "${shotPrompt.trim()}. Style: ${style.suffix}, $framing. Photorealistic, no text, no watermark."
     }
-
-    /** Tutarlılık için önceki kare referans verildiğinde eklenen talimat. */
-    const val REFERENCE_HINT = "The attached image is the previous frame of the same film. " +
-        "Keep the same characters (faces, clothing), the same location and the same lighting and " +
-        "color grade, but render the NEW shot described below with its own framing and action.\n\n"
 }
