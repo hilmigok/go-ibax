@@ -177,6 +177,13 @@
             android:text="@string/sounds" />
 
         <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/music"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checked="true"
+            android:text="@string/music" />
+
+        <com.google.android.material.materialswitch.MaterialSwitch
             android:id="@+id/narration"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

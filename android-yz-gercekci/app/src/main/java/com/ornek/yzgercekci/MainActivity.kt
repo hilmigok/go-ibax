@@ -64,7 +64,17 @@ class MainActivity : AppCompatActivity() {
 
         binding.captions.setOnCheckedChangeListener { _, checked -> binding.preview.captions = checked }
         binding.mimics.setOnCheckedChangeListener { _, checked -> binding.preview.mimics = checked }
-        binding.sounds.setOnCheckedChangeListener { _, _ -> restartPlayback() }
+        binding.sounds.setOnCheckedChangeListener { _, checked ->
+            binding.music.isEnabled = checked
+            restartPlayback()
+        }
+        binding.music.setOnCheckedChangeListener { _, _ ->
+            if (mixParts == null || job?.isActive == true) return@setOnCheckedChangeListener
+            lifecycleScope.launch {
+                soundtrack = remix()
+                restartPlayback()
+            }
+        }
 
         binding.btnSettings.setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
         binding.btnGenerate.setOnClickListener { generateAll() }
@@ -266,9 +276,12 @@ class MainActivity : AppCompatActivity() {
         for ((i, shot) in fitted.shots.withIndex()) {
             binding.status.text = getString(R.string.status_sound, i + 1, n)
             var clip: FloatArray? = null
-            if (fs != null && shot.sound.isNotEmpty()) {
+            if (shot.sound.isNotEmpty()) {
+                // Önce Freesound (anahtar varsa), sonra anahtarsız Openverse; ikisi de yoksa sentez.
                 clip = cache.getOrPut(shot.sound.lowercase()) {
-                    withContext(Dispatchers.IO) { fetchFreesound(fs, shot.sound) }
+                    withContext(Dispatchers.IO) {
+                        (if (fs != null) fetchFreesound(fs, shot.sound) else null) ?: fetchOpenverse(shot.sound)
+                    }
                 }
                 if (clip != null) real++
             }
@@ -278,13 +291,41 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.status.text = getString(R.string.status_mixing)
-        val pcm = withContext(Dispatchers.Default) {
-            val tl = Timeline(fitted.shots.map { it.duration })
-            Soundtrack.mix(tl, ambience, Synth.music(fitted.music, tl.total), voices)
+        val music = withContext(Dispatchers.Default) {
+            Synth.music(fitted.music, Timeline(fitted.shots.map { it.duration }).total)
         }
+        mixParts = MixParts(fitted, ambience, music, voices)
+        val pcm = remix() ?: ShortArray(0)
         var note = if (real > 0) getString(R.string.sound_real, real) else getString(R.string.sound_synth)
         if (voiceError.isNotEmpty()) note += " · anlatıcı yok: ${voiceError.take(90)}"
         return SoundResult(fitted, pcm, note)
+    }
+
+    /** Karıştırmanın parçaları: fon müziği açılıp kapanınca baştan üretmeden yeniden karıştırmak için. */
+    private class MixParts(val board: Storyboard, val ambience: List<FloatArray?>, val music: FloatArray, val voices: List<FloatArray?>)
+    private var mixParts: MixParts? = null
+
+    private suspend fun remix(): ShortArray? {
+        val p = mixParts ?: return null
+        val withMusic = binding.music.isChecked
+        return withContext(Dispatchers.Default) {
+            Soundtrack.mix(Timeline(p.board.shots.map { it.duration }), p.ambience, p.music.takeIf { withMusic }, p.voices)
+        }
+    }
+
+    /** Openverse'te (anahtarsız) CC0 / kamu malı kayıt arar. */
+    private fun fetchOpenverse(query: String): FloatArray? {
+        val ov = OpenverseClient()
+        val hits = try { ov.search(query) } catch (e: Exception) { return null }
+        for (hit in hits.take(3)) {
+            try {
+                val pcm = AudioDecoder.decode(ov.download(hit, cacheDir))
+                if (pcm.size > Soundtrack.SR * 2) return Soundtrack.makeLoopable(Synth.normalize(pcm, 0.8f))
+            } catch (e: Exception) {
+                // sıradaki kayda geç
+            }
+        }
+        return null
     }
 
     /** Freesound'da arar; ilk çözülebilen kaydı döngüye uygun hale getirip döndürür. */
@@ -504,6 +545,7 @@ class MainActivity : AppCompatActivity() {
     private fun clearImages() {
         player.stop()
         soundtrack = null
+        mixParts = null
         faces.clear()
         val old = images.toList()
         images.clear()

@@ -40,7 +40,12 @@ Metin ──► Gemini (yönetmen) ──► Senaryo: N çekim, her biri için a
   *woman crying*, *distant explosions*). Uygulama bu sözcüklerle **Freesound.org**'da yalnızca
   **CC0 (telifsiz, atıf gerektirmeyen)** kayıtları arar, indirir ve kareye yerleştirir.
   Ücretsiz Freesound anahtarı: https://freesound.org/apiv2/apply → Ayarlar'a yaz.
-- **Anahtar yoksa da ses var:** rüzgâr, yağmur, ateş çıtırtısı, uzak patlamalar, şehir uğultusu ve
+- **Anahtarsız gerçek kayıtlar:** Freesound anahtarı yoksa sesler **Openverse**'ten (Freesound,
+  Wikimedia, Jamendo'yu tarayan açık arama motoru) yalnızca CC0 / kamu malı kayıtlar arasından aranır.
+- **CapCut:** CapCut'ın ses kütüphanesine dışarıdan erişilemez ve oradaki sesler yalnızca CapCut içinde
+  kullanılmak üzere lisanslıdır. "Fon müziği" anahtarını kapatıp videoyu kaydet, sonra CapCut'ta kendi
+  müziğini ekle.
+- **Hiçbiri bulunamazsa da ses var:** rüzgâr, yağmur, ateş çıtırtısı, uzak patlamalar, şehir uğultusu ve
   kuş sesleri cihazda sıfırdan sentezlenir (`Synth.kt`).
 - **Fon müziği:** filmin havasına göre (hüzünlü, karanlık, epik, gergin, umutlu) cihazda bestelenir.
 - **Anlatıcı:** Gemini'nin gerçekçi sesiyle Türkçe seslendirme (`gemini-2.5-flash-preview-tts`). Kare
